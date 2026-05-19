@@ -1,0 +1,103 @@
+#' Base S7 class for creating new time units
+#' 
+#' This class is the primative class for time units, and should 
+#' be extended from when creating new time units. A new class
+#' is typically created with S7 using: 
+#' `S7::new_class("tu_***", parent = mt_tz_unit)`
+#' 
+#' Time units are the building blocks of calendars in mixtime. Each unit
+#' represents a specific temporal component (e.g., day, month, year) and
+#' can be combined using [new_calendar()] to create a calendar system.
+#' 
+#' When creating custom calendars, define time unit classes that inherit
+#' from either `mt_unit` (for standard units) or `mt_tz_unit` (for
+#' timezone-aware units), then pass them as named arguments to
+#' [new_calendar()]. The calendar will use these names to create
+#' constructor functions accessible via `$` notation (e.g., `calendar$day(1L)`).
+#' 
+#' @section Calendar Algebra Methods:
+#' 
+#' Time units enable calendar arithmetic through two key generic methods
+#' that should be implemented for custom time units:
+#' 
+#' * `chronon_cardinality(x, y, at)` - Returns the number of `x` granule
+#'   that fit within one `y` granule This can be a fixed value (e.g.,
+#'   7 days per week) or variable based on `at` (e.g., 28-31 days per month).
+#'   
+#' * `chronon_divmod(x, from, to)` - Converts time point `x` from granules of
+#'   `from` to granules of `to`, returning a list with `div` (the quotient)
+#'   and `mod`. This enables conversions between granules that have
+#'   variable cardinality (e.g., the date 2020-03-23 to the month 2020-03).
+#'   All conversions should be based on chronons since epoch (1970-01-01),
+#'   in the UTC time zone.
+#' 
+#' These methods work together to enable mixtime to perform calendar-aware
+#' arithmetic, understanding that months have variable lengths and handling
+#' timezone-aware conversions.
+#' 
+#' @param n The step size of time granule. For example, `n = 2L` is 2 time units -
+#'   for `cal_isoweek$week(2L)` that would be 2 weeks (a fortnight).
+#' 
+#' @return A time granule object of class `mt_unit`
+#' 
+#' @seealso [new_calendar()] for creating calendars from time units
+#' 
+#' @examples
+#' # Create a timezone-aware unit class
+#' 
+#' # Use these units to create a calendar
+#' my_calendar <- new_calendar(
+#'   day = S7::new_class("tu_my_day", parent = mt_unit),
+#'   month = S7::new_class("tu_my_month", parent = mt_tz_unit),
+#'   class = "my_calendar"
+#' )
+#' 
+#' # Access unit constructors from the calendar
+#' my_calendar$day(1L)
+#' my_calendar$month(3L, tz = "America/New_York")
+#' 
+#' @export
+#' @rdname mt_unit
+mt_unit <- S7::new_class(
+  "mt_unit", 
+  properties = list(
+    n = S7::new_property(
+      class = S7::class_numeric,
+      default = 1L
+    )
+  ),
+  # validator = function(self) {
+  #   if (length(self@n) != 1L) {
+  #     paste0("@n must be length 1 <numeric> value, not length ", length(self@n), ".")
+  #   }
+  # }
+)
+
+#' Base S7 class for mixtime vector objects
+#'
+#' `class_mixtime` is the base S7 class for all mixtime vector objects,
+#' inheriting from [vecvec::class_vecvec]. While not intended to be used
+#' directly, this S7 class is suitable to use when defining S7 methods for
+#' mixtime vectors. S3 methods can be defined using the `mixtime::mixtime` 
+#' class.
+#' 
+#' @param x A list of `"mt_time"` vectors, see [new_time()] for details.
+#' @inheritParams vecvec::class_vecvec
+#'
+#' @return When used as a class definition (e.g., in `S7::method(generic,
+#'   class_mixtime)`), an S7 class object representing the `mixtime` class,
+#'   inheriting from [vecvec::class_vecvec]. When called as a constructor
+#'   (`class_mixtime(list(...))`), a mixtime vector of S7 class `mixtime`
+#'   (also inheriting the S3 class `"mixtime"`), containing the supplied list
+#'   of time vectors as a [vecvec::class_vecvec] structure. End users should
+#'   prefer [mixtime()] or [new_mixtime()] for construction.
+#'
+#' @seealso [mixtime()] for creating mixtime vectors, and [new_mixtime()] for
+#' the low-level constructor function of this S7 class.
+#'
+#' @importFrom vecvec class_vecvec
+#' @export
+class_mixtime <- S7::new_class(
+  "mixtime",
+  parent = class_vecvec
+)

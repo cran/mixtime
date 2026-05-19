@@ -1,0 +1,1102 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+
+
+<title>Extending mixtime</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+span.underline{text-decoration: underline;}
+div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+</style>
+
+
+
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">Extending mixtime</h1>
+
+
+
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(mixtime)</span></code></pre></div>
+<p>This vignette documents the extension points made available in
+mixtime for creating new calendars and time units. As a running example,
+we will build the <a href="https://en.wikipedia.org/wiki/Symmetry454">Symmetry454
+calendar</a>, a perpetual solar calendar where every year has 12 months
+arranged in a 4–5–4 week pattern (four weeks, five weeks, four weeks per
+month), with an occasional 53rd week added to December in leap years.
+This implementation closely matches the implementation of
+<code>mixtime::cal_sym454</code>.</p>
+<p>The extension points covered are:</p>
+<ul>
+<li><a href="#time-units">Time units</a>: S7 classes inheriting from
+<code>mt_unit</code>, <code>mt_tz_unit</code>, or
+<code>mt_loc_unit</code></li>
+<li><a href="#calendars">Calendars</a>: Creating calendars from time
+units with <code>new_calendar()</code></li>
+<li><a href="#calendar-arithmetic">Calendar arithmetic</a> for defining
+temporal relationships between time units:
+<ul>
+<li><a href="#cardinality">Cardinality</a>: Define the number of finer
+units in a coarser unit with <code>chronon_cardinality()</code></li>
+<li><a href="#divmod">Divmod</a>: Define the division and remainder of
+time units with <code>chronon_divmod()</code></li>
+<li><a href="#epoch">Epoch anchors</a>: Define the reference point for a
+time unit with <code>chronon_epoch()</code></li>
+</ul></li>
+<li><a href="#labels">Labels</a> for displaying time, defined by:
+<ul>
+<li><a href="#display-time-units">Time units</a>: temporal properties
+(e.g. interval) and user messages with <code>time_unit_abbr()</code>,
+<code>time_unit_full()</code></li>
+<li><a href="#time-labels">Time labels</a>: labelling granular
+components of time with <code>linear_labels()</code>,
+<code>cyclical_labels()</code></li>
+<li><a href="#time-formats">Time formats</a>: default format strings
+with <code>chronon_format_linear()</code>,
+<code>chronon_format_cyclical()</code></li>
+</ul></li>
+</ul>
+<p>The mixtime package uses S7 for all extension methods. If you are new
+to S7, the vignette on <a href="https://rconsortium.github.io/S7/articles/generics-methods.html">generics
+and methods</a> is a good place to start. It is best to develop new
+calendars and time units in a separate package that imports mixtime, and
+registering your methods with the following <a href="https://rconsortium.github.io/S7/articles/packages.html"><code>.onLoad</code>
+hook</a>:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a>.onLoad <span class="ot">&lt;-</span> <span class="cf">function</span>(...) {</span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a>  S7<span class="sc">::</span><span class="fu">methods_register</span>()</span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a>}</span></code></pre></div>
+<div id="time-units" class="section level2">
+<h2>Time units</h2>
+<p>Time units are the building blocks of calendars. Time units are S7
+classes created with <code>new_time_unit()</code>, which inherit from
+<code>mt_unit</code> (a purely abstract time unit class).</p>
+<p>In practice, most time units should inherit either:</p>
+<ul>
+<li><code>mt_tz_unit</code> for civil-time units whose boundaries depend
+on a timezone (e.g. months, days, hours, …), or</li>
+<li><code>mt_loc_unit</code> for astronomical-time units whose
+boundaries depend on geographic location (e.g. solar days).</li>
+</ul>
+<p>All time units accept a numeric <code>n</code> argument representing
+the size of the unit (e.g. <code>1L</code> for “one month”). Additional
+arguments needed for your time unit can be defined with S7 by:</p>
+<ul>
+<li>inheriting properties from <code>mt_tz_unit</code> (<code>tz</code>
+IANA names) or <code>mt_loc_unit</code> (for <code>lon</code>,
+<code>lat</code>, and <code>alt</code>),</li>
+<li>defining custom S7 properties with
+<code>new_time_unit(properties = ...)</code>.</li>
+</ul>
+<p>The name of a time unit’s S7 class becomes the internal identifier
+for that unit, so it should be unique across all calendars. The class
+name is not important to users of the calendar, but it should be
+descriptive for developers.</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="co"># Timezone-aware Symmetry454 year and month units</span></span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a><span class="fu">new_time_unit</span>(<span class="st">&quot;tu_symmetry454_year&quot;</span>,  <span class="at">parent =</span> mt_tz_unit)</span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a><span class="co">#&gt; &lt;tu_symmetry454_year&gt; class</span></span>
+<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a><span class="co">#&gt; @ parent     : &lt;mixtime::mt_tz_unit&gt;</span></span>
+<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a><span class="co">#&gt; @ constructor: function(...) {...}</span></span>
+<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a><span class="co">#&gt; @ validator  : &lt;NULL&gt;</span></span>
+<span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a><span class="co">#&gt; @ properties :</span></span>
+<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a><span class="co">#&gt;  $ n : &lt;integer&gt; or &lt;double&gt;</span></span>
+<span id="cb3-9"><a href="#cb3-9" tabindex="-1"></a><span class="co">#&gt;  $ tz: &lt;character&gt;</span></span>
+<span id="cb3-10"><a href="#cb3-10" tabindex="-1"></a><span class="fu">new_time_unit</span>(<span class="st">&quot;tu_symmetry454_month&quot;</span>, <span class="at">parent =</span> mt_tz_unit)</span>
+<span id="cb3-11"><a href="#cb3-11" tabindex="-1"></a><span class="co">#&gt; &lt;tu_symmetry454_month&gt; class</span></span>
+<span id="cb3-12"><a href="#cb3-12" tabindex="-1"></a><span class="co">#&gt; @ parent     : &lt;mixtime::mt_tz_unit&gt;</span></span>
+<span id="cb3-13"><a href="#cb3-13" tabindex="-1"></a><span class="co">#&gt; @ constructor: function(...) {...}</span></span>
+<span id="cb3-14"><a href="#cb3-14" tabindex="-1"></a><span class="co">#&gt; @ validator  : &lt;NULL&gt;</span></span>
+<span id="cb3-15"><a href="#cb3-15" tabindex="-1"></a><span class="co">#&gt; @ properties :</span></span>
+<span id="cb3-16"><a href="#cb3-16" tabindex="-1"></a><span class="co">#&gt;  $ n : &lt;integer&gt; or &lt;double&gt;</span></span>
+<span id="cb3-17"><a href="#cb3-17" tabindex="-1"></a><span class="co">#&gt;  $ tz: &lt;character&gt;</span></span></code></pre></div>
+<p>These time units are typically exported within a calendar object
+(shown below) and accessed via <code>$</code> notation.</p>
+</div>
+<div id="calendars" class="section level2">
+<h2>Calendars</h2>
+<p>A calendar is a named collection of time units, created with
+<code>new_calendar()</code>. An optional <code>inherit</code> argument
+pulls in all units from an existing calendar (units defined in
+<code>...</code> take precedence). It is useful to inherit from a base
+calendar that defines common time units for civil and astronomical
+calendars. The base calendars provided by mixtime are:</p>
+<ul>
+<li><code>cal_time_civil</code>: civil time units anchored at midnight
+(e.g. days, hours, minutes, seconds, …)</li>
+<li><code>cal_time_solar_***</code>: solar time units anchored at
+sunrise, noon, sunset or midnight (e.g. solar days)</li>
+<li><code>cal_time_lunar</code>: lunar time units (e.g. lunar months,
+lunar phases)</li>
+</ul>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>cal_symmetry454 <span class="ot">&lt;-</span> <span class="fu">new_calendar</span>(</span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>  <span class="at">year  =</span> <span class="fu">new_time_unit</span>(<span class="st">&quot;tu_symmetry454_year&quot;</span>,  <span class="at">parent =</span> mt_tz_unit),</span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>  <span class="at">month =</span> <span class="fu">new_time_unit</span>(<span class="st">&quot;tu_symmetry454_month&quot;</span>, <span class="at">parent =</span> mt_tz_unit),</span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>  <span class="at">week  =</span> cal_isoweek<span class="sc">$</span>week,</span>
+<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a>  <span class="co"># Inherit civil-time units (day, hour, minute, second, ...)</span></span>
+<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a>  <span class="at">inherit =</span> cal_time_civil,</span>
+<span id="cb4-7"><a href="#cb4-7" tabindex="-1"></a>  <span class="at">class =</span> <span class="st">&quot;cal_symmetry454&quot;</span></span>
+<span id="cb4-8"><a href="#cb4-8" tabindex="-1"></a>)</span>
+<span id="cb4-9"><a href="#cb4-9" tabindex="-1"></a></span>
+<span id="cb4-10"><a href="#cb4-10" tabindex="-1"></a>cal_symmetry454</span>
+<span id="cb4-11"><a href="#cb4-11" tabindex="-1"></a><span class="co">#&gt; &lt;cal_symmetry454&gt;</span></span>
+<span id="cb4-12"><a href="#cb4-12" tabindex="-1"></a><span class="co">#&gt; Time units:</span></span>
+<span id="cb4-13"><a href="#cb4-13" tabindex="-1"></a><span class="co">#&gt;   - year</span></span>
+<span id="cb4-14"><a href="#cb4-14" tabindex="-1"></a><span class="co">#&gt;   - month</span></span>
+<span id="cb4-15"><a href="#cb4-15" tabindex="-1"></a><span class="co">#&gt;   - week</span></span>
+<span id="cb4-16"><a href="#cb4-16" tabindex="-1"></a><span class="co">#&gt;   - day</span></span>
+<span id="cb4-17"><a href="#cb4-17" tabindex="-1"></a><span class="co">#&gt;   - ampm</span></span>
+<span id="cb4-18"><a href="#cb4-18" tabindex="-1"></a><span class="co">#&gt;   - hour</span></span>
+<span id="cb4-19"><a href="#cb4-19" tabindex="-1"></a><span class="co">#&gt;   - minute</span></span>
+<span id="cb4-20"><a href="#cb4-20" tabindex="-1"></a><span class="co">#&gt;   - second</span></span>
+<span id="cb4-21"><a href="#cb4-21" tabindex="-1"></a><span class="co">#&gt;   - millisecond</span></span></code></pre></div>
+<p>In this case, the time unit for weeks exactly matches the ISO week
+unit, so we can reuse the existing <code>cal_isoweek$week</code> unit
+rather than defining a new one. This is because our implementation below
+of the Symmetry454 calendar has the same week structure as the ISO
+calendar (same epoch, 7-day length, and Monday start). If your calendar
+unit shares the same name but has a different structure (e.g. a month
+comprised of 4 or 5 weeks), a new time unit with a unique S7 class must
+be defined (similar to the year and month units above).</p>
+<p>Unit constructors are now accessible via <code>$</code>:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>cal_symmetry454<span class="sc">$</span><span class="fu">year</span>(<span class="dv">1</span><span class="dt">L</span>)</span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a><span class="co">#&gt; &lt;tu_symmetry454_year&gt;</span></span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a><span class="co">#&gt;  @ n : int 1</span></span>
+<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a><span class="co">#&gt;  @ tz: &#39;mt_naive&#39; chr NA</span></span>
+<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a>cal_symmetry454<span class="sc">$</span><span class="fu">month</span>(<span class="dv">1</span><span class="dt">L</span>, <span class="at">tz =</span> <span class="st">&quot;UTC&quot;</span>)</span>
+<span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a><span class="co">#&gt; &lt;tu_symmetry454_month&gt;</span></span>
+<span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a><span class="co">#&gt;  @ n : int 1</span></span>
+<span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a><span class="co">#&gt;  @ tz: chr &quot;UTC&quot;</span></span></code></pre></div>
+<p>These time units can be used as chronons/cycles within
+<code>mixtime()</code> (and also <code>linear_time()</code>,
+<code>cyclical_time()</code>). The temporal relationships between these
+units must be defined by the calendar arithmetic methods described
+below.</p>
+</div>
+<div id="calendar-arithmetic" class="section level2">
+<h2>Calendar arithmetic</h2>
+<p>Two S7 generics drive all calendar calculations:
+<code>chronon_cardinality()</code> and <code>chronon_divmod()</code>.
+These functions are used to manipulate time, such as converting between
+units, generating sequences, and comparing time points. The details of
+how they work are not important for users of the calendar, but they are
+the main extension points for developers creating new calendars.</p>
+<p>For a time unit to be useful in mixtime, at minimum a
+<code>chronon_cardinality()</code> method between itself and the next
+coarser unit must be defined. Time units with irregular relationships
+(e.g. days → months) also require <code>chronon_divmod()</code> to
+efficiently compute relationships between units.</p>
+<p>Defining these methods for time units between different calendars is
+also possible, which allows for interoperability between calendars. In
+most cases, calendars will share a common base calendar
+(e.g. <code>cal_time_civil</code>) which provides a common time unit
+(e.g. civil days) or methods for converting between different calendars
+(e.g. civil midnight to solar midnight).</p>
+<div id="cardinality" class="section level3">
+<h3>Cardinality</h3>
+<p>The cardinality is the number of finer units that fit inside a
+coarser unit. For example, there are 7 days in a week, so the
+cardinality of <code>cal_isoweek$day(1L)</code> in terms of
+<code>cal_isoweek$week(1L)</code> is 7.</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="fu">chronon_cardinality</span>(cal_isoweek<span class="sc">$</span><span class="fu">day</span>(<span class="dv">1</span><span class="dt">L</span>), cal_isoweek<span class="sc">$</span><span class="fu">week</span>(<span class="dv">1</span><span class="dt">L</span>))</span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a><span class="co">#&gt; [1] 7</span></span></code></pre></div>
+<p>For units with a fixed relationship (e.g. 7 days per week) the
+<code>at</code> argument can be ignored. The <code>at</code> variable
+disambiguates the point in time for variable cardinalities (e.g. days
+per month), <code>at</code> is the internal numeric representation of
+time in the coarser unit (e.g. months since epoch for days →
+months).</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="fu">chronon_cardinality</span>(cal_gregorian<span class="sc">$</span><span class="fu">day</span>(<span class="dv">1</span><span class="dt">L</span>), cal_gregorian<span class="sc">$</span><span class="fu">month</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="at">at =</span> <span class="dv">0</span><span class="dt">L</span>) <span class="co"># Jan 1970</span></span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a><span class="co">#&gt; [1] 31</span></span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a><span class="fu">chronon_cardinality</span>(cal_gregorian<span class="sc">$</span><span class="fu">day</span>(<span class="dv">1</span><span class="dt">L</span>), cal_gregorian<span class="sc">$</span><span class="fu">month</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="at">at =</span> <span class="dv">1</span><span class="dt">L</span>) <span class="co"># Feb 1970</span></span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a><span class="co">#&gt; [1] 28</span></span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a><span class="fu">chronon_cardinality</span>(cal_gregorian<span class="sc">$</span><span class="fu">day</span>(<span class="dv">1</span><span class="dt">L</span>), cal_gregorian<span class="sc">$</span><span class="fu">month</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="at">at =</span> <span class="dv">25</span><span class="dt">L</span>) <span class="co"># Feb 1972 (leap year)</span></span>
+<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a><span class="co">#&gt; [1] 29</span></span></code></pre></div>
+<p>In the Symmetry454 calendar every year has exactly 12 months (a fixed
+relationship).</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="co"># Each Symmetry454 year has 12 months</span></span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a>S7<span class="sc">::</span><span class="fu">method</span>(chronon_cardinality, <span class="fu">list</span>(cal_symmetry454<span class="sc">$</span>month, cal_symmetry454<span class="sc">$</span>year)) <span class="ot">&lt;-</span></span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>  <span class="cf">function</span>(x, y, <span class="at">at =</span> <span class="cn">NULL</span>) {</span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a>    y<span class="sc">@</span>n <span class="sc">*</span> <span class="dv">12</span><span class="dt">L</span> <span class="sc">/</span> x<span class="sc">@</span>n</span>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a>  }</span>
+<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a><span class="fu">chronon_cardinality</span>(cal_symmetry454<span class="sc">$</span><span class="fu">month</span>(<span class="dv">1</span><span class="dt">L</span>), cal_symmetry454<span class="sc">$</span><span class="fu">year</span>(<span class="dv">1</span><span class="dt">L</span>))</span>
+<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a><span class="co">#&gt; [1] 12</span></span></code></pre></div>
+<p>The number of weeks in each month follows the repeating
+<strong>4–5–4</strong> pattern across each quarter (months 1–3: 4, 5, 4
+weeks; months 4–6: 4, 5, 4 weeks; and so on). The <code>circsum()</code>
+helper computes how many weeks fall in an n-month period by summing the
+appropriate slice of this cycle, which is especially useful when the
+<code>month</code> unit has a size greater than 1.</p>
+<p>Symmetry454 uses a <strong>293-year leap-week cycle</strong>: a year
+is a leap year (gaining a 53rd week in December) when
+<code>(52 * year + 146) %% 293 &lt; 52</code>. This differs
+substantially from the familiar Gregorian leap-day rule and produces 52
+leap years in every 293-year period.</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a>S7<span class="sc">::</span><span class="fu">method</span>(chronon_cardinality, <span class="fu">list</span>(cal_symmetry454<span class="sc">$</span>week, cal_symmetry454<span class="sc">$</span>month)) <span class="ot">&lt;-</span></span>
+<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a>  <span class="cf">function</span>(x, y, <span class="at">at =</span> <span class="cn">NULL</span>) {</span>
+<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a>    <span class="co"># The number of weeks in each n-month period</span></span>
+<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a>    month_size <span class="ot">&lt;-</span> y<span class="sc">@</span>n</span>
+<span id="cb9-5"><a href="#cb9-5" tabindex="-1"></a>    nweeks_cyc <span class="ot">&lt;-</span> <span class="fu">circsum</span>(<span class="fu">c</span>(<span class="dv">4</span><span class="dt">L</span>, <span class="dv">5</span><span class="dt">L</span>, <span class="dv">4</span><span class="dt">L</span>), month_size)</span>
+<span id="cb9-6"><a href="#cb9-6" tabindex="-1"></a></span>
+<span id="cb9-7"><a href="#cb9-7" tabindex="-1"></a>    <span class="co"># Find which n-month period we&#39;re in based on the &quot;at&quot; position (months since epoch)</span></span>
+<span id="cb9-8"><a href="#cb9-8" tabindex="-1"></a>    period <span class="ot">&lt;-</span> at <span class="sc">%%</span> <span class="fu">length</span>(nweeks_cyc) <span class="sc">+</span> <span class="dv">1</span><span class="dt">L</span></span>
+<span id="cb9-9"><a href="#cb9-9" tabindex="-1"></a></span>
+<span id="cb9-10"><a href="#cb9-10" tabindex="-1"></a>    nweeks <span class="ot">&lt;-</span> nweeks_cyc[period]</span>
+<span id="cb9-11"><a href="#cb9-11" tabindex="-1"></a></span>
+<span id="cb9-12"><a href="#cb9-12" tabindex="-1"></a>    <span class="co"># Add the extra week to December for Symmetry454 leap years.</span></span>
+<span id="cb9-13"><a href="#cb9-13" tabindex="-1"></a>    <span class="co"># A year is a leap year when (52*year + 146) %% 293 &lt; 52.</span></span>
+<span id="cb9-14"><a href="#cb9-14" tabindex="-1"></a>    m1 <span class="ot">&lt;-</span> at <span class="sc">*</span> month_size</span>
+<span id="cb9-15"><a href="#cb9-15" tabindex="-1"></a>    contains_dec <span class="ot">&lt;-</span> <span class="fu">which</span>((m1 <span class="sc">%%</span> <span class="dv">12</span><span class="dt">L</span>) <span class="sc">&gt;=</span> (<span class="dv">12</span><span class="dt">L</span> <span class="sc">-</span> month_size))</span>
+<span id="cb9-16"><a href="#cb9-16" tabindex="-1"></a>    year <span class="ot">&lt;-</span> <span class="dv">1970</span><span class="dt">L</span> <span class="sc">+</span> m1[contains_dec] <span class="sc">%/%</span> <span class="dv">12</span><span class="dt">L</span></span>
+<span id="cb9-17"><a href="#cb9-17" tabindex="-1"></a>    is_leap_year <span class="ot">&lt;-</span> ((<span class="dv">52</span> <span class="sc">*</span> year <span class="sc">+</span> <span class="dv">146</span><span class="dt">L</span>) <span class="sc">%%</span> <span class="dv">293</span><span class="dt">L</span>) <span class="sc">&lt;</span> <span class="dv">52</span><span class="dt">L</span></span>
+<span id="cb9-18"><a href="#cb9-18" tabindex="-1"></a></span>
+<span id="cb9-19"><a href="#cb9-19" tabindex="-1"></a>    nweeks[contains_dec[is_leap_year]] <span class="ot">&lt;-</span> nweeks[contains_dec[is_leap_year]] <span class="sc">+</span> <span class="dv">1</span><span class="dt">L</span></span>
+<span id="cb9-20"><a href="#cb9-20" tabindex="-1"></a></span>
+<span id="cb9-21"><a href="#cb9-21" tabindex="-1"></a>    <span class="co"># Scale by the number of weeks in the n-week time granule</span></span>
+<span id="cb9-22"><a href="#cb9-22" tabindex="-1"></a>    nweeks <span class="sc">/</span> x<span class="sc">@</span>n</span>
+<span id="cb9-23"><a href="#cb9-23" tabindex="-1"></a>  }</span>
+<span id="cb9-24"><a href="#cb9-24" tabindex="-1"></a></span>
+<span id="cb9-25"><a href="#cb9-25" tabindex="-1"></a><span class="co"># The 4-5-4 cycle across a full Symmetry454 year</span></span>
+<span id="cb9-26"><a href="#cb9-26" tabindex="-1"></a><span class="fu">chronon_cardinality</span>(cal_symmetry454<span class="sc">$</span><span class="fu">week</span>(<span class="dv">1</span><span class="dt">L</span>), cal_symmetry454<span class="sc">$</span><span class="fu">month</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="at">at =</span> <span class="dv">0</span><span class="sc">:</span><span class="dv">11</span>)</span>
+<span id="cb9-27"><a href="#cb9-27" tabindex="-1"></a><span class="co">#&gt;  [1] 4 5 4 4 5 4 4 5 4 4 5 5</span></span>
+<span id="cb9-28"><a href="#cb9-28" tabindex="-1"></a></span>
+<span id="cb9-29"><a href="#cb9-29" tabindex="-1"></a><span class="co"># 1970 is a leap year (53 weeks), so December has 5 weeks instead of 4</span></span>
+<span id="cb9-30"><a href="#cb9-30" tabindex="-1"></a><span class="fu">chronon_cardinality</span>(cal_symmetry454<span class="sc">$</span><span class="fu">week</span>(<span class="dv">1</span><span class="dt">L</span>), cal_symmetry454<span class="sc">$</span><span class="fu">month</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="at">at =</span> <span class="dv">11</span><span class="dt">L</span>)</span>
+<span id="cb9-31"><a href="#cb9-31" tabindex="-1"></a><span class="co">#&gt; [1] 5</span></span>
+<span id="cb9-32"><a href="#cb9-32" tabindex="-1"></a></span>
+<span id="cb9-33"><a href="#cb9-33" tabindex="-1"></a><span class="co"># Non-leap year: December has the usual 4 weeks</span></span>
+<span id="cb9-34"><a href="#cb9-34" tabindex="-1"></a><span class="fu">chronon_cardinality</span>(cal_symmetry454<span class="sc">$</span><span class="fu">week</span>(<span class="dv">1</span><span class="dt">L</span>), cal_symmetry454<span class="sc">$</span><span class="fu">month</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="at">at =</span> <span class="dv">12</span><span class="sc">:</span><span class="dv">23</span>) <span class="co"># Dec 1971</span></span>
+<span id="cb9-35"><a href="#cb9-35" tabindex="-1"></a><span class="co">#&gt;  [1] 4 5 4 4 5 4 4 5 4 4 5 4</span></span>
+<span id="cb9-36"><a href="#cb9-36" tabindex="-1"></a></span>
+<span id="cb9-37"><a href="#cb9-37" tabindex="-1"></a><span class="co"># The number of weeks in a multi-month period is the sum of the weeks in each month</span></span>
+<span id="cb9-38"><a href="#cb9-38" tabindex="-1"></a><span class="fu">chronon_cardinality</span>(cal_symmetry454<span class="sc">$</span><span class="fu">week</span>(<span class="dv">1</span><span class="dt">L</span>), cal_symmetry454<span class="sc">$</span><span class="fu">month</span>(<span class="dv">2</span><span class="dt">L</span>), <span class="at">at =</span> <span class="dv">0</span><span class="sc">:</span><span class="dv">5</span>)</span>
+<span id="cb9-39"><a href="#cb9-39" tabindex="-1"></a><span class="co">#&gt; [1]  9  8  9  9  8 10</span></span></code></pre></div>
+<p>Cardinality methods are only required for adjacent time units
+(e.g. month → year, week → month), but they can be defined for
+non-adjacent units as an optimization. If a direct cardinality method is
+not defined, mixtime will attempt to derive it by computing cardinality
+along a path of intermediate units.</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a><span class="co"># The number of weeks in a Symmetry454 year (derived from week → month → year)</span></span>
+<span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a><span class="co"># Note that the leap year in 1970 (at = 0) produces 53 weeks via week → month.</span></span>
+<span id="cb10-3"><a href="#cb10-3" tabindex="-1"></a><span class="fu">chronon_cardinality</span>(cal_symmetry454<span class="sc">$</span><span class="fu">week</span>(<span class="dv">1</span><span class="dt">L</span>), cal_symmetry454<span class="sc">$</span><span class="fu">year</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="at">at =</span> <span class="dv">0</span><span class="sc">:</span><span class="dv">4</span>)</span>
+<span id="cb10-4"><a href="#cb10-4" tabindex="-1"></a><span class="co">#&gt; [1] 53 52 52 52 52</span></span>
+<span id="cb10-5"><a href="#cb10-5" tabindex="-1"></a></span>
+<span id="cb10-6"><a href="#cb10-6" tabindex="-1"></a><span class="co"># The number of days in a Symmetry454 year (derived from day → week → month → year)</span></span>
+<span id="cb10-7"><a href="#cb10-7" tabindex="-1"></a><span class="fu">chronon_cardinality</span>(cal_symmetry454<span class="sc">$</span><span class="fu">day</span>(<span class="dv">1</span><span class="dt">L</span>), cal_symmetry454<span class="sc">$</span><span class="fu">year</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="at">at =</span> <span class="dv">0</span><span class="sc">:</span><span class="dv">4</span>)</span>
+<span id="cb10-8"><a href="#cb10-8" tabindex="-1"></a><span class="co">#&gt; [1] 371 364 364 364 364</span></span></code></pre></div>
+<p>The cardinality methods also define which units are finer/coarser for
+operations requiring graph traversal, so it is essential that the first
+unit is the finer unit and the second unit is the coarser unit. The
+inverse cardinality method (with the units flipped) is automatically
+derived, so you should only define one direction (finer → coarser) of
+the relationship.</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a><span class="co"># The number of Symmetry454 years in a month is the inverse of months → years (1/12)</span></span>
+<span id="cb11-2"><a href="#cb11-2" tabindex="-1"></a><span class="fu">chronon_cardinality</span>(cal_symmetry454<span class="sc">$</span><span class="fu">year</span>(<span class="dv">1</span><span class="dt">L</span>), cal_symmetry454<span class="sc">$</span><span class="fu">month</span>(<span class="dv">1</span><span class="dt">L</span>))</span>
+<span id="cb11-3"><a href="#cb11-3" tabindex="-1"></a><span class="co">#&gt; [1] 0.08333333</span></span>
+<span id="cb11-4"><a href="#cb11-4" tabindex="-1"></a></span>
+<span id="cb11-5"><a href="#cb11-5" tabindex="-1"></a><span class="co"># The number of Symmetry454 months in 2 weeks (requires `at` since weeks → months is irregular)</span></span>
+<span id="cb11-6"><a href="#cb11-6" tabindex="-1"></a><span class="fu">chronon_cardinality</span>(cal_symmetry454<span class="sc">$</span><span class="fu">month</span>(<span class="dv">1</span><span class="dt">L</span>), cal_symmetry454<span class="sc">$</span><span class="fu">week</span>(<span class="dv">2</span><span class="dt">L</span>), <span class="at">at =</span> <span class="dv">0</span><span class="sc">:</span><span class="dv">4</span>)</span>
+<span id="cb11-7"><a href="#cb11-7" tabindex="-1"></a><span class="co">#&gt; [1] 0.5 0.4 0.5 0.5 0.4</span></span></code></pre></div>
+</div>
+<div id="divmod" class="section level3">
+<h3>Divmod</h3>
+<p>The divmod operation is a combined division and modulus that converts
+between time granules and is defined with <code>chronon_divmod()</code>
+methods. These methods are required to efficiently convert between units
+with irregular relationships, such as days → months. For regular
+relationships (e.g. days → weeks) the divmod is automatically derived
+from <code>chronon_cardinality()</code> methods alone.</p>
+<p><code>chronon_divmod(from, to, x)</code> converts times
+<code>x</code> in the <code>from</code> granules into time points in
+<code>to</code> granules. For example, the date “1970-02-15” is day 45
+since epoch (<code>x = 45</code> and
+<code>from = cal_gregorian$day(1L)</code>), converted to months
+(<code>to = cal_gregorian$month(1L)</code>) gives 1 month and 14 days
+(div = 1, mod = 14).</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a><span class="fu">chronon_divmod</span>(cal_gregorian<span class="sc">$</span><span class="fu">day</span>(<span class="dv">1</span><span class="dt">L</span>), cal_gregorian<span class="sc">$</span><span class="fu">month</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="dv">45</span><span class="dt">L</span>)</span>
+<span id="cb12-2"><a href="#cb12-2" tabindex="-1"></a><span class="co">#&gt; $div</span></span>
+<span id="cb12-3"><a href="#cb12-3" tabindex="-1"></a><span class="co">#&gt; [1] 1</span></span>
+<span id="cb12-4"><a href="#cb12-4" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb12-5"><a href="#cb12-5" tabindex="-1"></a><span class="co">#&gt; $mod</span></span>
+<span id="cb12-6"><a href="#cb12-6" tabindex="-1"></a><span class="co">#&gt; [1] 14</span></span></code></pre></div>
+<p>Methods for <code>chronon_divmod()</code> return a list with:</p>
+<ul>
+<li><code>div</code> - the quotient (chronons in <code>to</code>
+granules)</li>
+<li><code>mod</code> - the remainder (leftover <code>from</code>
+chronons)</li>
+</ul>
+<p>Note that all time values are zero-indexed, so <code>$div = 0</code>
+is January 1970, and <code>$mod = 0</code> is the first day of the
+month. So the above result can be interpreted as <code>$div = 1</code>
+is February 1970 and <code>$mod = 14</code> is 14 remaining days
+(i.e. the 15th).</p>
+<p>The Symmetry454 calendar has an irregular cardinality for weeks →
+months (because of the 4–5–4 pattern and leap weeks), so a divmod method
+is required. The key challenge is correctly accounting for the 293-year
+leap year pattern. Symmetry454 leap weeks follow a structured sub-cycle
+pattern: 293 years decompose into five groups (45+79+45+79+45 years),
+each of which decomposes further into primary 17-year sub-cycles (with 3
+leap years) and secondary 11-year sub-cycles (with 2 leap years). The
+majority of the following code uses this structure to efficiently count
+how many leap weeks have occurred before any given week number in a
+cycle.</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a>S7<span class="sc">::</span><span class="fu">method</span>(chronon_divmod, <span class="fu">list</span>(cal_symmetry454<span class="sc">$</span>week, cal_symmetry454<span class="sc">$</span>month)) <span class="ot">&lt;-</span></span>
+<span id="cb13-2"><a href="#cb13-2" tabindex="-1"></a>  <span class="cf">function</span>(from, to, x) {</span>
+<span id="cb13-3"><a href="#cb13-3" tabindex="-1"></a>    <span class="co"># Most of this code works on 1-week granules</span></span>
+<span id="cb13-4"><a href="#cb13-4" tabindex="-1"></a>    week_size <span class="ot">&lt;-</span> from<span class="sc">@</span>n</span>
+<span id="cb13-5"><a href="#cb13-5" tabindex="-1"></a>    x <span class="ot">&lt;-</span> x <span class="sc">*</span> week_size  <span class="co"># convert n-weeks to 1-weeks</span></span>
+<span id="cb13-6"><a href="#cb13-6" tabindex="-1"></a></span>
+<span id="cb13-7"><a href="#cb13-7" tabindex="-1"></a>    <span class="co"># 1. Account for leap weeks by regularising x to have a fixed 52 weeks per year</span></span>
+<span id="cb13-8"><a href="#cb13-8" tabindex="-1"></a></span>
+<span id="cb13-9"><a href="#cb13-9" tabindex="-1"></a>    <span class="co"># The symmetrical sub-cycles of the 293-year leap week cycle are:</span></span>
+<span id="cb13-10"><a href="#cb13-10" tabindex="-1"></a>    <span class="co">#   17+11+17 + 17+17+11+17+17 + 17+11+17 + 17+17+11+17+17 + 17+11+17</span></span>
+<span id="cb13-11"><a href="#cb13-11" tabindex="-1"></a>    <span class="co">#   = 45 + 79 + 45 + 79 + 45 = 293</span></span>
+<span id="cb13-12"><a href="#cb13-12" tabindex="-1"></a>    <span class="co"># Primary (length 17) sub-cycles have 3 leap years: 00100000100000100</span></span>
+<span id="cb13-13"><a href="#cb13-13" tabindex="-1"></a>    <span class="co"># Secondary (length 11) sub-cycles have 2 leap years: 00100000100</span></span>
+<span id="cb13-14"><a href="#cb13-14" tabindex="-1"></a>    leaps_cycle_17 <span class="ot">&lt;-</span> <span class="cf">function</span>(w) (w <span class="sc">&gt;=</span> <span class="dv">157</span><span class="dt">L</span>) <span class="sc">+</span> (w <span class="sc">&gt;=</span> <span class="dv">470</span><span class="dt">L</span>) <span class="sc">+</span> (w <span class="sc">&gt;=</span> <span class="dv">783</span><span class="dt">L</span>)</span>
+<span id="cb13-15"><a href="#cb13-15" tabindex="-1"></a>    leaps_cycle_11 <span class="ot">&lt;-</span> <span class="cf">function</span>(w) (w <span class="sc">&gt;=</span> <span class="dv">157</span><span class="dt">L</span>) <span class="sc">+</span> (w <span class="sc">&gt;=</span> <span class="dv">470</span><span class="dt">L</span>)</span>
+<span id="cb13-16"><a href="#cb13-16" tabindex="-1"></a>    leaps_cycle_45 <span class="ot">&lt;-</span> <span class="cf">function</span>(w) {</span>
+<span id="cb13-17"><a href="#cb13-17" tabindex="-1"></a>      <span class="fu">ifelse</span>(w <span class="sc">&lt;</span> <span class="dv">887</span><span class="dt">L</span>,  <span class="fu">leaps_cycle_17</span>(w),</span>
+<span id="cb13-18"><a href="#cb13-18" tabindex="-1"></a>      <span class="fu">ifelse</span>(w <span class="sc">&lt;</span> <span class="dv">1461</span><span class="dt">L</span>, <span class="dv">3</span><span class="dt">L</span> <span class="sc">+</span> <span class="fu">leaps_cycle_11</span>(w <span class="sc">-</span> <span class="dv">887</span><span class="dt">L</span>),</span>
+<span id="cb13-19"><a href="#cb13-19" tabindex="-1"></a>                        <span class="dv">5</span><span class="dt">L</span> <span class="sc">+</span> <span class="fu">leaps_cycle_17</span>(w <span class="sc">-</span> <span class="dv">1461</span><span class="dt">L</span>)))</span>
+<span id="cb13-20"><a href="#cb13-20" tabindex="-1"></a>    }</span>
+<span id="cb13-21"><a href="#cb13-21" tabindex="-1"></a>    leaps_cycle_79 <span class="ot">&lt;-</span> <span class="cf">function</span>(w) {</span>
+<span id="cb13-22"><a href="#cb13-22" tabindex="-1"></a>      <span class="fu">ifelse</span>(w <span class="sc">&lt;</span> <span class="dv">887</span><span class="dt">L</span>,  <span class="fu">leaps_cycle_17</span>(w),</span>
+<span id="cb13-23"><a href="#cb13-23" tabindex="-1"></a>      <span class="fu">ifelse</span>(w <span class="sc">&lt;</span> <span class="dv">1774</span><span class="dt">L</span>, <span class="dv">3</span><span class="dt">L</span>  <span class="sc">+</span> <span class="fu">leaps_cycle_17</span>(w <span class="sc">-</span> <span class="dv">887</span><span class="dt">L</span>),</span>
+<span id="cb13-24"><a href="#cb13-24" tabindex="-1"></a>      <span class="fu">ifelse</span>(w <span class="sc">&lt;</span> <span class="dv">2348</span><span class="dt">L</span>, <span class="dv">6</span><span class="dt">L</span>  <span class="sc">+</span> <span class="fu">leaps_cycle_11</span>(w <span class="sc">-</span> <span class="dv">1774</span><span class="dt">L</span>),</span>
+<span id="cb13-25"><a href="#cb13-25" tabindex="-1"></a>      <span class="fu">ifelse</span>(w <span class="sc">&lt;</span> <span class="dv">3235</span><span class="dt">L</span>, <span class="dv">8</span><span class="dt">L</span>  <span class="sc">+</span> <span class="fu">leaps_cycle_17</span>(w <span class="sc">-</span> <span class="dv">2348</span><span class="dt">L</span>),</span>
+<span id="cb13-26"><a href="#cb13-26" tabindex="-1"></a>                        <span class="dv">11</span><span class="dt">L</span> <span class="sc">+</span> <span class="fu">leaps_cycle_17</span>(w <span class="sc">-</span> <span class="dv">3235</span><span class="dt">L</span>)))))</span>
+<span id="cb13-27"><a href="#cb13-27" tabindex="-1"></a>    }</span>
+<span id="cb13-28"><a href="#cb13-28" tabindex="-1"></a>    leaps_symmetry454 <span class="ot">&lt;-</span> <span class="cf">function</span>(x) {</span>
+<span id="cb13-29"><a href="#cb13-29" tabindex="-1"></a>      <span class="co"># There are 15288 weeks in a full 293-year cycle (293*52 + 52 leap weeks)</span></span>
+<span id="cb13-30"><a href="#cb13-30" tabindex="-1"></a>      w <span class="ot">&lt;-</span> x <span class="sc">%%</span> <span class="dv">15288</span><span class="dt">L</span></span>
+<span id="cb13-31"><a href="#cb13-31" tabindex="-1"></a>      x <span class="sc">%/%</span> <span class="dv">15288</span><span class="dt">L</span> <span class="sc">*</span> <span class="dv">52</span><span class="dt">L</span> <span class="sc">+</span></span>
+<span id="cb13-32"><a href="#cb13-32" tabindex="-1"></a>      <span class="fu">ifelse</span>(w <span class="sc">&lt;</span> <span class="dv">2348</span><span class="dt">L</span>,  <span class="fu">leaps_cycle_45</span>(w),</span>
+<span id="cb13-33"><a href="#cb13-33" tabindex="-1"></a>      <span class="fu">ifelse</span>(w <span class="sc">&lt;</span> <span class="dv">6470</span><span class="dt">L</span>,  <span class="dv">8</span><span class="dt">L</span>  <span class="sc">+</span> <span class="fu">leaps_cycle_79</span>(w <span class="sc">-</span> <span class="dv">2348</span><span class="dt">L</span>),</span>
+<span id="cb13-34"><a href="#cb13-34" tabindex="-1"></a>      <span class="fu">ifelse</span>(w <span class="sc">&lt;</span> <span class="dv">8818</span><span class="dt">L</span>,  <span class="dv">22</span><span class="dt">L</span> <span class="sc">+</span> <span class="fu">leaps_cycle_45</span>(w <span class="sc">-</span> <span class="dv">6470</span><span class="dt">L</span>),</span>
+<span id="cb13-35"><a href="#cb13-35" tabindex="-1"></a>      <span class="fu">ifelse</span>(w <span class="sc">&lt;</span> <span class="dv">12940</span><span class="dt">L</span>, <span class="dv">30</span><span class="dt">L</span> <span class="sc">+</span> <span class="fu">leaps_cycle_79</span>(w <span class="sc">-</span> <span class="dv">8818</span><span class="dt">L</span>),</span>
+<span id="cb13-36"><a href="#cb13-36" tabindex="-1"></a>                         <span class="dv">44</span><span class="dt">L</span> <span class="sc">+</span> <span class="fu">leaps_cycle_45</span>(w <span class="sc">-</span> <span class="dv">12940</span><span class="dt">L</span>)))))</span>
+<span id="cb13-37"><a href="#cb13-37" tabindex="-1"></a>    }</span>
+<span id="cb13-38"><a href="#cb13-38" tabindex="-1"></a></span>
+<span id="cb13-39"><a href="#cb13-39" tabindex="-1"></a>    <span class="co"># Offset x to align with the nearest 293-year cycle boundary before the epoch.</span></span>
+<span id="cb13-40"><a href="#cb13-40" tabindex="-1"></a>    <span class="co"># There are 349 leap years between year 1-W1 and the 1970-W1 epoch, and the</span></span>
+<span id="cb13-41"><a href="#cb13-41" tabindex="-1"></a>    <span class="co"># nearest cycle start is (1969*52 + 349) %% (293*52 + 52) = 11009 weeks before epoch.</span></span>
+<span id="cb13-42"><a href="#cb13-42" tabindex="-1"></a>    x_cyc <span class="ot">&lt;-</span> x <span class="sc">+</span> <span class="dv">11009</span><span class="dt">L</span> <span class="sc">+</span> week_size  <span class="co"># right align multi-week granules</span></span>
+<span id="cb13-43"><a href="#cb13-43" tabindex="-1"></a>    n_leaps <span class="ot">&lt;-</span> <span class="fu">leaps_symmetry454</span>(x_cyc)</span>
+<span id="cb13-44"><a href="#cb13-44" tabindex="-1"></a></span>
+<span id="cb13-45"><a href="#cb13-45" tabindex="-1"></a>    <span class="co"># Regularise x to have exactly 52 weeks per year by subtracting leap weeks.</span></span>
+<span id="cb13-46"><a href="#cb13-46" tabindex="-1"></a>    <span class="co"># (37 leap years occur in the cycle before the epoch, so we add 37 back.)</span></span>
+<span id="cb13-47"><a href="#cb13-47" tabindex="-1"></a>    x_reg <span class="ot">&lt;-</span> x <span class="sc">-</span> n_leaps <span class="sc">+</span> <span class="dv">37</span><span class="dt">L</span></span>
+<span id="cb13-48"><a href="#cb13-48" tabindex="-1"></a></span>
+<span id="cb13-49"><a href="#cb13-49" tabindex="-1"></a>    <span class="co"># 2. Use the 4-5-4 pattern to find the month (div) and week remainder (mod)</span></span>
+<span id="cb13-50"><a href="#cb13-50" tabindex="-1"></a>    <span class="do">## The number of weeks in each n-month period</span></span>
+<span id="cb13-51"><a href="#cb13-51" tabindex="-1"></a>    month_size <span class="ot">&lt;-</span> to<span class="sc">@</span>n</span>
+<span id="cb13-52"><a href="#cb13-52" tabindex="-1"></a>    weeks_len <span class="ot">&lt;-</span> <span class="fu">circsum</span>(<span class="fu">c</span>(<span class="dv">4</span><span class="dt">L</span>, <span class="dv">5</span><span class="dt">L</span>, <span class="dv">4</span><span class="dt">L</span>), month_size)</span>
+<span id="cb13-53"><a href="#cb13-53" tabindex="-1"></a></span>
+<span id="cb13-54"><a href="#cb13-54" tabindex="-1"></a>    <span class="do">## The total weeks in a full n-month cycle</span></span>
+<span id="cb13-55"><a href="#cb13-55" tabindex="-1"></a>    weeks_tot <span class="ot">&lt;-</span> <span class="fu">sum</span>(weeks_len)</span>
+<span id="cb13-56"><a href="#cb13-56" tabindex="-1"></a></span>
+<span id="cb13-57"><a href="#cb13-57" tabindex="-1"></a>    <span class="do">## Find which n-month cycle we&#39;re in based on the regularised week count</span></span>
+<span id="cb13-58"><a href="#cb13-58" tabindex="-1"></a>    period_full <span class="ot">&lt;-</span> x_reg <span class="sc">%/%</span> weeks_tot</span>
+<span id="cb13-59"><a href="#cb13-59" tabindex="-1"></a></span>
+<span id="cb13-60"><a href="#cb13-60" tabindex="-1"></a>    <span class="do">## Find which part within the n-month cycle we&#39;re in</span></span>
+<span id="cb13-61"><a href="#cb13-61" tabindex="-1"></a>    weeks_seq  <span class="ot">&lt;-</span> <span class="fu">cumsum</span>(weeks_len[<span class="sc">-</span><span class="fu">length</span>(weeks_len)])</span>
+<span id="cb13-62"><a href="#cb13-62" tabindex="-1"></a>    period_part <span class="ot">&lt;-</span> <span class="fu">rowSums</span>(<span class="fu">outer</span>(x_reg <span class="sc">%%</span> weeks_tot, weeks_seq, <span class="st">&quot;&gt;=&quot;</span>))</span>
+<span id="cb13-63"><a href="#cb13-63" tabindex="-1"></a></span>
+<span id="cb13-64"><a href="#cb13-64" tabindex="-1"></a>    <span class="co"># div: total complete n-month cycles + complete n-months within the current cycle</span></span>
+<span id="cb13-65"><a href="#cb13-65" tabindex="-1"></a>    div <span class="ot">&lt;-</span> period_full <span class="sc">*</span> <span class="fu">length</span>(weeks_len) <span class="sc">+</span> period_part</span>
+<span id="cb13-66"><a href="#cb13-66" tabindex="-1"></a>    <span class="co"># mod: remaining (regularised) weeks within the current n-month period</span></span>
+<span id="cb13-67"><a href="#cb13-67" tabindex="-1"></a>    mod <span class="ot">&lt;-</span> x_reg <span class="sc">%%</span> weeks_tot <span class="sc">-</span> <span class="fu">c</span>(<span class="dv">0</span><span class="dt">L</span>, weeks_seq)[period_part <span class="sc">+</span> <span class="dv">1</span><span class="dt">L</span>]</span>
+<span id="cb13-68"><a href="#cb13-68" tabindex="-1"></a></span>
+<span id="cb13-69"><a href="#cb13-69" tabindex="-1"></a>    <span class="co"># 3. Adjust the remainder to account for leap weeks that were removed during regularisation.</span></span>
+<span id="cb13-70"><a href="#cb13-70" tabindex="-1"></a></span>
+<span id="cb13-71"><a href="#cb13-71" tabindex="-1"></a>    <span class="co"># Identify leap weeks re-using cumulative in-cycle leap week counts: leaps_symmetry454()</span></span>
+<span id="cb13-72"><a href="#cb13-72" tabindex="-1"></a>    <span class="co"># If the week added a leap week from the previous, then it itself must be a leap week.</span></span>
+<span id="cb13-73"><a href="#cb13-73" tabindex="-1"></a>    <span class="co"># Applied only to regularised 52/53rd weeks of the year (only these weeks can be leap weeks)</span></span>
+<span id="cb13-74"><a href="#cb13-74" tabindex="-1"></a>    last_weeks  <span class="ot">&lt;-</span> <span class="fu">which</span>(x_reg <span class="sc">%%</span> <span class="dv">52</span><span class="dt">L</span> <span class="sc">&gt;=</span> <span class="dv">51</span><span class="dt">L</span>)</span>
+<span id="cb13-75"><a href="#cb13-75" tabindex="-1"></a>    leap_weeks  <span class="ot">&lt;-</span> last_weeks[n_leaps[last_weeks] <span class="sc">-</span> <span class="fu">leaps_symmetry454</span>(x_cyc[last_weeks] <span class="sc">-</span> week_size) <span class="sc">&gt;</span> <span class="dv">0</span><span class="dt">L</span>]</span>
+<span id="cb13-76"><a href="#cb13-76" tabindex="-1"></a>    mod[leap_weeks] <span class="ot">&lt;-</span> mod[leap_weeks] <span class="sc">+</span> <span class="dv">1</span><span class="dt">L</span>  <span class="co"># restore leap week to remainder</span></span>
+<span id="cb13-77"><a href="#cb13-77" tabindex="-1"></a></span>
+<span id="cb13-78"><a href="#cb13-78" tabindex="-1"></a>    <span class="co"># Scale mod back to the original n-unit week size</span></span>
+<span id="cb13-79"><a href="#cb13-79" tabindex="-1"></a>    mod <span class="ot">&lt;-</span> mod <span class="sc">%/%</span> week_size</span>
+<span id="cb13-80"><a href="#cb13-80" tabindex="-1"></a></span>
+<span id="cb13-81"><a href="#cb13-81" tabindex="-1"></a>    <span class="co"># Return the divmod result</span></span>
+<span id="cb13-82"><a href="#cb13-82" tabindex="-1"></a>    <span class="fu">list</span>(<span class="at">div =</span> div, <span class="at">mod =</span> mod)</span>
+<span id="cb13-83"><a href="#cb13-83" tabindex="-1"></a>  }</span></code></pre></div>
+<p>The general strategy used in the above code is to first remove the
+complexity of the 293-year leap week cycle by regularising the week
+count to have a fixed 52 weeks per year (essentially subtracting the
+cumulative leap weeks from each cycle). This regularised week count is
+easier to work with the 4-5-4 pattern, which we use to find the
+converted month (div) as the number of complete n-month cycles plus the
+number of complete n-months within the current cycle, and the
+regularised week remainder (mod) as the remaining weeks within the
+current n-month period. The final step is to adjust the remainder to
+account for any leap weeks that were removed during regularisation.</p>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a><span class="co"># Week 19 (0-indexed) of 1970 is the 2nd week (div=1) of May 1970 (mod=4)</span></span>
+<span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a><span class="fu">with</span>(cal_symmetry454, <span class="fu">chronon_divmod</span>(<span class="fu">week</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="fu">month</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="dv">18</span><span class="dt">L</span>))</span>
+<span id="cb14-3"><a href="#cb14-3" tabindex="-1"></a><span class="co">#&gt; $div</span></span>
+<span id="cb14-4"><a href="#cb14-4" tabindex="-1"></a><span class="co">#&gt; [1] 4</span></span>
+<span id="cb14-5"><a href="#cb14-5" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb14-6"><a href="#cb14-6" tabindex="-1"></a><span class="co">#&gt; $mod</span></span>
+<span id="cb14-7"><a href="#cb14-7" tabindex="-1"></a><span class="co">#&gt; [1] 1</span></span>
+<span id="cb14-8"><a href="#cb14-8" tabindex="-1"></a></span>
+<span id="cb14-9"><a href="#cb14-9" tabindex="-1"></a><span class="co"># Week 52 (0-indexed) is the leap week of 1970; it is the 5th week (div=4) of Dec 1970 (mod=11)</span></span>
+<span id="cb14-10"><a href="#cb14-10" tabindex="-1"></a><span class="fu">with</span>(cal_symmetry454, <span class="fu">chronon_divmod</span>(<span class="fu">week</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="fu">month</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="dv">52</span><span class="dt">L</span>))</span>
+<span id="cb14-11"><a href="#cb14-11" tabindex="-1"></a><span class="co">#&gt; $div</span></span>
+<span id="cb14-12"><a href="#cb14-12" tabindex="-1"></a><span class="co">#&gt; [1] 11</span></span>
+<span id="cb14-13"><a href="#cb14-13" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb14-14"><a href="#cb14-14" tabindex="-1"></a><span class="co">#&gt; $mod</span></span>
+<span id="cb14-15"><a href="#cb14-15" tabindex="-1"></a><span class="co">#&gt; [1] 4</span></span></code></pre></div>
+<p>While most of this complication relates to the leap week pattern,
+<code>chronon_divmod()</code> methods are further complicated by the
+generality of converting between n-unit time granules (e.g. converting
+from 1 week to 2 month chronons). If this generality is not needed, your
+method can raise an error when the time granule is not size 1
+(e.g. <code>if (to@n != 1L) stop(&quot;...&quot;)</code>).</p>
+<p>The inverse relationship must also be defined to convert from months
+→ weeks. When converting from coarser → finer units, integer values for
+<code>x</code> introduce temporal indeterminacy. The convention for
+divmod methods is to left-align the conversion (use the first moment of
+the month). For brevity, the inverse divmod method is not shown here but
+can be found in the package’s <a href="https://github.com/mitchelloharawild/mixtime/blob/main/R/cal_sym454.R"><code>cal_sym454</code>
+source code</a></p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a><span class="co"># The 5th fortnight of 1970 is the 3rd fortnight (div=2) of Feb 1970 (mod=1)</span></span>
+<span id="cb15-2"><a href="#cb15-2" tabindex="-1"></a><span class="fu">with</span>(cal_symmetry454, <span class="fu">chronon_divmod</span>(<span class="fu">week</span>(<span class="dv">2</span><span class="dt">L</span>), <span class="fu">month</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="dv">4</span><span class="dt">L</span>))</span>
+<span id="cb15-3"><a href="#cb15-3" tabindex="-1"></a><span class="co">#&gt; $div</span></span>
+<span id="cb15-4"><a href="#cb15-4" tabindex="-1"></a><span class="co">#&gt; [1] 1</span></span>
+<span id="cb15-5"><a href="#cb15-5" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb15-6"><a href="#cb15-6" tabindex="-1"></a><span class="co">#&gt; $mod</span></span>
+<span id="cb15-7"><a href="#cb15-7" tabindex="-1"></a><span class="co">#&gt; [1] 2</span></span></code></pre></div>
+<p>If a direct <code>chronon_divmod()</code> method is not defined for a
+pair of units, mixtime will attempt to derive it by chaining together
+divmod operations along the shortest path of intermediate units.</p>
+<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" tabindex="-1"></a><span class="co"># Divmod for converting days → years is derived from days → weeks → months → years</span></span>
+<span id="cb16-2"><a href="#cb16-2" tabindex="-1"></a><span class="co"># Gregorian day 839 since unix epoch (1972-04-19) is symmetry454 day 101 (mod=100) of year 1972 (div=2)</span></span>
+<span id="cb16-3"><a href="#cb16-3" tabindex="-1"></a><span class="fu">with</span>(cal_symmetry454, <span class="fu">chronon_divmod</span>(<span class="fu">day</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="fu">year</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="dv">839</span><span class="dt">L</span>))</span>
+<span id="cb16-4"><a href="#cb16-4" tabindex="-1"></a><span class="co">#&gt; $div</span></span>
+<span id="cb16-5"><a href="#cb16-5" tabindex="-1"></a><span class="co">#&gt; [1] 2</span></span>
+<span id="cb16-6"><a href="#cb16-6" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb16-7"><a href="#cb16-7" tabindex="-1"></a><span class="co">#&gt; $mod</span></span>
+<span id="cb16-8"><a href="#cb16-8" tabindex="-1"></a><span class="co">#&gt; [1] 100</span></span></code></pre></div>
+</div>
+<div id="epoch" class="section level3">
+<h3>Epoch anchors</h3>
+<p>The <code>chronon_epoch()</code> method defines the anchor point for
+a time unit, which is the reference point for all time calculations. The
+epoch is used as the zero point for time points, for example time point
+0 in <code>cal_gregorian$year(1L)</code> corresponds to the year 1970.
+This anchor maps the internal numeric representation of time (e.g. years
+since epoch) to a real-world time point (e.g. “1970”), and is used as
+the origin for numeric inputs and labelling linear parts of time.</p>
+<p>This implementation of the Symmetry454 calendar has the origin (t =
+0) at 1970 W1, so <code>cal_symmetry454$year(1L)</code> has an epoch of
+1970.</p>
+<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" tabindex="-1"></a>S7<span class="sc">::</span><span class="fu">method</span>(chronon_epoch, cal_symmetry454<span class="sc">$</span>year) <span class="ot">&lt;-</span> <span class="cf">function</span>(x) <span class="dv">1970</span><span class="dt">L</span></span></code></pre></div>
+</div>
+</div>
+<div id="labels" class="section level2">
+<h2>Displaying time</h2>
+<p>The labelling methods control how time units and time points are
+displayed as text. They are used in messages, plot axes, and when
+formatting time vectors with <code>format()</code>. The formatting
+methods return format strings that are parsed by
+<code>format_mixtime()</code> to generate the final labels.</p>
+<div id="display-time-units" class="section level3">
+<h3>Time units</h3>
+<p>Each time unit has two format methods:</p>
+<ul>
+<li><code>time_unit_full()</code> returns the singular full name of the
+unit (e.g. “Symmetry454 year”)</li>
+<li><code>time_unit_abbr()</code> returns the short abbreviation of the
+unit (e.g. “Y”)</li>
+</ul>
+<p>The full name is used in messages (e.g. “Can’t convert from
+Symmetry454 year to day”) and the abbreviation is used for displaying
+time intervals and durations.</p>
+<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" tabindex="-1"></a>S7<span class="sc">::</span><span class="fu">method</span>(time_unit_full, cal_symmetry454<span class="sc">$</span>year)  <span class="ot">&lt;-</span> <span class="cf">function</span>(x) <span class="st">&quot;Symmetry454 year&quot;</span></span>
+<span id="cb18-2"><a href="#cb18-2" tabindex="-1"></a>S7<span class="sc">::</span><span class="fu">method</span>(time_unit_abbr, cal_symmetry454<span class="sc">$</span>year)  <span class="ot">&lt;-</span> <span class="cf">function</span>(x) <span class="st">&quot;Y&quot;</span></span>
+<span id="cb18-3"><a href="#cb18-3" tabindex="-1"></a>S7<span class="sc">::</span><span class="fu">method</span>(time_unit_full, cal_symmetry454<span class="sc">$</span>month) <span class="ot">&lt;-</span> <span class="cf">function</span>(x) <span class="st">&quot;Symmetry454 month&quot;</span></span>
+<span id="cb18-4"><a href="#cb18-4" tabindex="-1"></a>S7<span class="sc">::</span><span class="fu">method</span>(time_unit_abbr, cal_symmetry454<span class="sc">$</span>month) <span class="ot">&lt;-</span> <span class="cf">function</span>(x) <span class="st">&quot;M&quot;</span></span></code></pre></div>
+<p>The time unit abbreviations are also used in the default time
+formatting string, so we can now create and view a Symmetry454 linear
+time vector:</p>
+<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" tabindex="-1"></a><span class="fu">linear_time</span>(<span class="fu">as.Date</span>(<span class="st">&quot;1955-11-12&quot;</span>), <span class="at">chronon =</span> cal_symmetry454<span class="sc">$</span><span class="fu">year</span>(<span class="dv">1</span><span class="dt">L</span>))</span>
+<span id="cb19-2"><a href="#cb19-2" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb19-3"><a href="#cb19-3" tabindex="-1"></a><span class="co">#&gt; [1] Y1955</span></span></code></pre></div>
+<p>The linear time helper functions can also be used with the new
+calendar:</p>
+<div class="sourceCode" id="cb20"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" tabindex="-1"></a><span class="fu">year</span>(<span class="fu">as.Date</span>(<span class="st">&quot;1955-11-12&quot;</span>), <span class="at">calendar =</span> cal_symmetry454)</span>
+<span id="cb20-2"><a href="#cb20-2" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb20-3"><a href="#cb20-3" tabindex="-1"></a><span class="co">#&gt; [1] Y1955</span></span></code></pre></div>
+<p>Cyclical time vectors can also be created with the new calendar, and
+the default formatting string will use the time unit abbreviations:</p>
+<div class="sourceCode" id="cb21"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb21-1"><a href="#cb21-1" tabindex="-1"></a><span class="co"># Week of the month</span></span>
+<span id="cb21-2"><a href="#cb21-2" tabindex="-1"></a><span class="fu">cyclical_time</span>(<span class="fu">as.Date</span>(<span class="st">&quot;1955-11-12&quot;</span>), <span class="at">chronon =</span> <span class="fu">week</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="at">cycle =</span> <span class="fu">month</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="at">calendar =</span> cal_symmetry454)</span>
+<span id="cb21-3"><a href="#cb21-3" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb21-4"><a href="#cb21-4" tabindex="-1"></a><span class="co">#&gt; [1] W02</span></span>
+<span id="cb21-5"><a href="#cb21-5" tabindex="-1"></a></span>
+<span id="cb21-6"><a href="#cb21-6" tabindex="-1"></a><span class="co"># Month of the year</span></span>
+<span id="cb21-7"><a href="#cb21-7" tabindex="-1"></a><span class="fu">month_of_year</span>(<span class="fu">as.Date</span>(<span class="st">&quot;1955-11-12&quot;</span>), <span class="at">calendar =</span> cal_symmetry454)</span>
+<span id="cb21-8"><a href="#cb21-8" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb21-9"><a href="#cb21-9" tabindex="-1"></a><span class="co">#&gt; [1] M10</span></span></code></pre></div>
+<p>Cyclical time labels default to 0-indexing, so the month of year is
+labelled as “10” for November. This can be improved by defining custom
+label methods as described in the next section.</p>
+</div>
+<div id="time-labels" class="section level3">
+<h3>Time labels</h3>
+<p>The time label functions describe how each granule of time
+(e.g. years, months, weeks) is displayed. There are two types of labels
+to consider: linear time labels are for continuous time granules
+(usually the coarsest time unit, years), and cyclical time labels are
+for time granules that nest (cycle over) another granule (e.g. months
+within a year, days within a week).</p>
+<p>The <code>linear_labels()</code> and <code>cyclical_labels()</code>
+methods should return character vectors of the same length as the input
+time indices <code>i</code>.</p>
+<p>While not enforced, we recommend using the following argument names
+for common label options:</p>
+<ul>
+<li><code>label</code>: if <code>TRUE</code>, return labelled values
+(e.g. “January”, “February”, …), otherwise return unlabelled values
+(e.g. “1”, “2”, …)</li>
+<li><code>abbreviate</code>: if <code>TRUE</code> (and
+<code>label</code> is <code>TRUE</code>), return abbreviated labels
+(e.g. “Jan”, “Feb”, …), otherwise return full labels (e.g. “January”,
+“February”, …)</li>
+</ul>
+<div id="linear-time-labels-linear_labels" class="section level4">
+<h4>Linear time labels: <code>linear_labels()</code></h4>
+<p>In most cases, the default linear labels provided by
+<code>linear_labels()</code> are sufficient, which simply return the
+internal numeric representation of the time point (e.g. “0”, “1”, “2”,
+…). An example of when this default could be improved is by correctly
+labelling years about the era boundary (e.g. “2BC”, “1BC”, “1”, “2”, …
+instead of “-1”, “0”, “1”, “2”, …).</p>
+<div class="sourceCode" id="cb22"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb22-1"><a href="#cb22-1" tabindex="-1"></a>S7<span class="sc">::</span><span class="fu">method</span>(linear_labels, cal_symmetry454<span class="sc">$</span>year) <span class="ot">&lt;-</span> <span class="cf">function</span>(granule, i, ...) {</span>
+<span id="cb22-2"><a href="#cb22-2" tabindex="-1"></a>  <span class="fu">ifelse</span>(i <span class="sc">&lt;=</span> <span class="dv">0</span><span class="dt">L</span>, <span class="fu">paste0</span>(<span class="sc">-</span>i <span class="sc">+</span> <span class="dv">1</span><span class="dt">L</span>, <span class="st">&quot;BC&quot;</span>), i)</span>
+<span id="cb22-3"><a href="#cb22-3" tabindex="-1"></a>}</span></code></pre></div>
+<p>Then the transition from 1 BC to 1 AD is appropriately labelled:</p>
+<div class="sourceCode" id="cb23"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb23-1"><a href="#cb23-1" tabindex="-1"></a><span class="fu">year</span>(<span class="sc">-</span><span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>, <span class="at">calendar =</span> cal_symmetry454)</span>
+<span id="cb23-2"><a href="#cb23-2" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[4]&gt;</span></span>
+<span id="cb23-3"><a href="#cb23-3" tabindex="-1"></a><span class="co">#&gt; [1] Y2BC Y1BC Y1   Y2</span></span></code></pre></div>
+<p>We’ll remove the “Y” prefix from the year format strings with the
+time format methods below to make these labels more readable.</p>
+</div>
+<div id="cyclical-time-labels-cyclical_labels" class="section level4">
+<h4>Cyclical time labels: <code>cyclical_labels()</code></h4>
+<p>It is common to need custom labels for cyclical time granules, since
+cyclical time points often have familiar labels (e.g. Jan, Feb, … for
+months in years) or are 1-indexed (e.g. 1, 2, … for days in a month).
+The default method for <code>cyclical_labels()</code> simply uses the
+internal 0-indexed numeric representation of the time point.</p>
+<div class="sourceCode" id="cb24"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb24-1"><a href="#cb24-1" tabindex="-1"></a><span class="co"># Labels for months of the year, essentially the same as Gregorian months in years.</span></span>
+<span id="cb24-2"><a href="#cb24-2" tabindex="-1"></a>S7<span class="sc">::</span><span class="fu">method</span>(cyclical_labels, <span class="fu">list</span>(cal_symmetry454<span class="sc">$</span>month, cal_symmetry454<span class="sc">$</span>year)) <span class="ot">&lt;-</span></span>
+<span id="cb24-3"><a href="#cb24-3" tabindex="-1"></a>  <span class="cf">function</span>(granule, cycle, i, <span class="at">label =</span> <span class="cn">FALSE</span>, <span class="at">abbreviate =</span> <span class="cn">FALSE</span>, ...) {</span>
+<span id="cb24-4"><a href="#cb24-4" tabindex="-1"></a>    <span class="cf">if</span> (label) {</span>
+<span id="cb24-5"><a href="#cb24-5" tabindex="-1"></a>      <span class="co"># Index into R&#39;s localised month name objects (month.name and month.abb)</span></span>
+<span id="cb24-6"><a href="#cb24-6" tabindex="-1"></a>      <span class="cf">if</span> (abbreviate) month.abb[i <span class="sc">+</span> <span class="dv">1</span><span class="dt">L</span>] <span class="cf">else</span> month.name[i <span class="sc">+</span> <span class="dv">1</span><span class="dt">L</span>]</span>
+<span id="cb24-7"><a href="#cb24-7" tabindex="-1"></a>    } <span class="cf">else</span> {</span>
+<span id="cb24-8"><a href="#cb24-8" tabindex="-1"></a>      <span class="co"># Use i + 1L for 1-indexing months (so January is 1, February is 2, ...)</span></span>
+<span id="cb24-9"><a href="#cb24-9" tabindex="-1"></a>      <span class="fu">sprintf</span>(<span class="st">&quot;%02d&quot;</span>, i <span class="sc">+</span> <span class="dv">1</span><span class="dt">L</span>)</span>
+<span id="cb24-10"><a href="#cb24-10" tabindex="-1"></a>    }</span>
+<span id="cb24-11"><a href="#cb24-11" tabindex="-1"></a>  }</span>
+<span id="cb24-12"><a href="#cb24-12" tabindex="-1"></a></span>
+<span id="cb24-13"><a href="#cb24-13" tabindex="-1"></a><span class="co"># Labels for weeks of the month are simply 1-indexed (e.g. &quot;W1&quot;, &quot;W2&quot;, ...)</span></span>
+<span id="cb24-14"><a href="#cb24-14" tabindex="-1"></a>S7<span class="sc">::</span><span class="fu">method</span>(cyclical_labels, <span class="fu">list</span>(cal_symmetry454<span class="sc">$</span>week, cal_symmetry454<span class="sc">$</span>month)) <span class="ot">&lt;-</span></span>
+<span id="cb24-15"><a href="#cb24-15" tabindex="-1"></a>  <span class="cf">function</span>(granule, cycle, i, ...) {</span>
+<span id="cb24-16"><a href="#cb24-16" tabindex="-1"></a>    <span class="fu">as.character</span>(i <span class="sc">+</span> <span class="dv">1</span><span class="dt">L</span>)</span>
+<span id="cb24-17"><a href="#cb24-17" tabindex="-1"></a>  }</span></code></pre></div>
+<p>The other cyclical labels (e.g. day of week) are inherited from
+<code>cal_isoweek</code> since we reused the ISO week unit, so they are
+correctly labelled as days of the week (e.g. “Mon”, “Tue”, …).</p>
+<div class="sourceCode" id="cb25"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb25-1"><a href="#cb25-1" tabindex="-1"></a><span class="co"># Month of year</span></span>
+<span id="cb25-2"><a href="#cb25-2" tabindex="-1"></a><span class="fu">month_of_year</span>(<span class="fu">as.Date</span>(<span class="st">&quot;1955-11-12&quot;</span>), <span class="at">calendar =</span> cal_symmetry454)</span>
+<span id="cb25-3"><a href="#cb25-3" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb25-4"><a href="#cb25-4" tabindex="-1"></a><span class="co">#&gt; [1] M11</span></span>
+<span id="cb25-5"><a href="#cb25-5" tabindex="-1"></a><span class="co"># Week of month</span></span>
+<span id="cb25-6"><a href="#cb25-6" tabindex="-1"></a><span class="fu">cyclical_time</span>(<span class="fu">as.Date</span>(<span class="st">&quot;1955-11-12&quot;</span>), <span class="at">chronon =</span> cal_symmetry454<span class="sc">$</span><span class="fu">week</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="at">cycle =</span> cal_symmetry454<span class="sc">$</span><span class="fu">month</span>(<span class="dv">1</span><span class="dt">L</span>))</span>
+<span id="cb25-7"><a href="#cb25-7" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb25-8"><a href="#cb25-8" tabindex="-1"></a><span class="co">#&gt; [1] W2</span></span>
+<span id="cb25-9"><a href="#cb25-9" tabindex="-1"></a></span>
+<span id="cb25-10"><a href="#cb25-10" tabindex="-1"></a><span class="co"># Day of week (inherited from cal_isoweek)</span></span>
+<span id="cb25-11"><a href="#cb25-11" tabindex="-1"></a><span class="fu">day_of_week</span>(<span class="fu">as.Date</span>(<span class="st">&quot;1955-11-12&quot;</span>), <span class="at">calendar =</span> cal_symmetry454)</span>
+<span id="cb25-12"><a href="#cb25-12" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb25-13"><a href="#cb25-13" tabindex="-1"></a><span class="co">#&gt; [1] Sat</span></span>
+<span id="cb25-14"><a href="#cb25-14" tabindex="-1"></a><span class="co"># Day of year (inherited from cal_time_civil)</span></span>
+<span id="cb25-15"><a href="#cb25-15" tabindex="-1"></a><span class="fu">day_of_year</span>(<span class="fu">as.Date</span>(<span class="st">&quot;1955-11-12&quot;</span>), <span class="at">calendar =</span> cal_symmetry454)</span>
+<span id="cb25-16"><a href="#cb25-16" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb25-17"><a href="#cb25-17" tabindex="-1"></a><span class="co">#&gt; [1] D363</span></span></code></pre></div>
+<p>With both linear and cyclical label methods in place, the formatting
+now produces correctly indexed and more informative labels for
+Symmetry454 time vectors:</p>
+<div class="sourceCode" id="cb26"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb26-1"><a href="#cb26-1" tabindex="-1"></a><span class="fu">date</span>(<span class="fu">as.Date</span>(<span class="st">&quot;1955-11-12&quot;</span>), <span class="at">calendar =</span> cal_symmetry454)</span>
+<span id="cb26-2"><a href="#cb26-2" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb26-3"><a href="#cb26-3" tabindex="-1"></a><span class="co">#&gt; [1] 1955-11-13</span></span>
+<span id="cb26-4"><a href="#cb26-4" tabindex="-1"></a><span class="fu">yearweek</span>(<span class="fu">as.Date</span>(<span class="st">&quot;1955-11-12&quot;</span>), <span class="at">calendar =</span> cal_symmetry454)</span>
+<span id="cb26-5"><a href="#cb26-5" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb26-6"><a href="#cb26-6" tabindex="-1"></a><span class="co">#&gt; [1] 1955 W52</span></span>
+<span id="cb26-7"><a href="#cb26-7" tabindex="-1"></a><span class="fu">yearmonth</span>(<span class="fu">as.Date</span>(<span class="st">&quot;1955-11-12&quot;</span>), <span class="at">calendar =</span> cal_symmetry454)</span>
+<span id="cb26-8"><a href="#cb26-8" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb26-9"><a href="#cb26-9" tabindex="-1"></a><span class="co">#&gt; [1] M-170</span></span></code></pre></div>
+<p>These default formats can be improved to better suit the Symmetry454
+calendar. For example, the week format of <code>YYYY WW</code> is
+inherited from <code>cal_isoweek</code> but <code>YYYY-MM-WW</code> is
+more informative for Symmetry454 since the weeks are nested within
+months. The default format for months is <code>MM</code>, but
+<code>YYYY-MM</code> is more informative. The time format methods below
+allow us to change the default formats for linear and cyclical time
+vectors.</p>
+</div>
+</div>
+<div id="time-formats" class="section level3">
+<h3>Time formats</h3>
+<!-- TODO: Time formatting vignette -->
+<p>The default formatting for time vectors is defined by
+<code>chronon_format_linear()</code> for linear time and
+<code>chronon_format_cyclical()</code> for cyclical time. These methods
+return mixtime format strings which are used to format and print time
+vectors. A mixtime format string is a <a href="https://glue.tidyverse.org/">glue</a> style string where time
+granules wrapped in <code>{}</code> are replaced with granule labels for
+the corresponding time points. These format strings are described in
+more detail in the <code>vignette(&quot;time-format-strings&quot;)</code>
+vignette.</p>
+<p>There are two types of granule labels useful for these time format
+strings:</p>
+<ul>
+<li><code>lin(&lt;time granule&gt;)</code> - Granule labels for linear
+time grnaules, usually the largest granule
+(e.g. <code>lin(year(1L))</code>). These labels are produced by
+<code>linear_labels()</code>.</li>
+<li><code>cyc(&lt;time granule&gt;, &lt;cycle granule&gt;)</code> -
+Granule labels for cyclical time granules, where the labels are relative
+to the cycle (e.g. <code>cyc(month(1L), year(1L))</code> is the month
+within the year). These labels are produced by
+<code>cyclical_labels()</code>.</li>
+</ul>
+<p>The <code>&lt;time granule&gt;</code> and
+<code>&lt;cycle granule&gt;</code> placeholders in the format string
+must evaluate to a time granule from a calendar time unit. For
+convenience, using time units (e.g. <code>lin(year)</code>) default to a
+size 1 time granule (e.g. <code>lin(year(1L))</code>), and the calendar
+is inferred from the time vector being formatted. It is also possible to
+explicitly specify the calendar
+(e.g. <code>lin(cal_symmetry454$year(1L))</code>), which allows time
+formats to use granules from different calendars.</p>
+<div id="linear-time-formats-chronon_format_linear" class="section level4">
+<h4>Linear time formats: <code>chronon_format_linear()</code></h4>
+<p>Linear time formats dispatch on the chronon and calendar. The
+calendar is needed to disambiguate identical time units that exist in
+multiple calendars. In this case, <code>cal_symmetry454$day</code> is
+common to most civil calendars, and <code>cal_symmetry454$week</code>
+shares the same implementation as <code>cal_isoweek$week</code> - in
+both cases a Symmetry 454 format method is needed to display dates
+appropriately.</p>
+<div class="sourceCode" id="cb27"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb27-1"><a href="#cb27-1" tabindex="-1"></a><span class="co"># Simply display years as numbers (e.g. &quot;1970&quot;, &quot;1971&quot;, ...)</span></span>
+<span id="cb27-2"><a href="#cb27-2" tabindex="-1"></a>S7<span class="sc">::</span><span class="fu">method</span>(</span>
+<span id="cb27-3"><a href="#cb27-3" tabindex="-1"></a>  chronon_format_linear,</span>
+<span id="cb27-4"><a href="#cb27-4" tabindex="-1"></a>  <span class="fu">list</span>(cal_symmetry454<span class="sc">$</span>year, S7<span class="sc">::</span>class_any)</span>
+<span id="cb27-5"><a href="#cb27-5" tabindex="-1"></a>) <span class="ot">&lt;-</span> <span class="cf">function</span>(x, cal) <span class="st">&quot;{lin(year(1L))}&quot;</span></span>
+<span id="cb27-6"><a href="#cb27-6" tabindex="-1"></a></span>
+<span id="cb27-7"><a href="#cb27-7" tabindex="-1"></a><span class="co"># Display labelled months as month within year (e.g. &quot;1970 Jan&quot;, &quot;1970 Feb&quot;, ...)</span></span>
+<span id="cb27-8"><a href="#cb27-8" tabindex="-1"></a>S7<span class="sc">::</span><span class="fu">method</span>(</span>
+<span id="cb27-9"><a href="#cb27-9" tabindex="-1"></a>  chronon_format_linear,</span>
+<span id="cb27-10"><a href="#cb27-10" tabindex="-1"></a>  <span class="fu">list</span>(cal_symmetry454<span class="sc">$</span>month, S7<span class="sc">::</span>class_any)</span>
+<span id="cb27-11"><a href="#cb27-11" tabindex="-1"></a>) <span class="ot">&lt;-</span> <span class="cf">function</span>(x, cal) <span class="st">&quot;{lin(year(1L))}-{cyc(month(1L), year(1L), label=TRUE, abbreviate=TRUE)}&quot;</span></span>
+<span id="cb27-12"><a href="#cb27-12" tabindex="-1"></a></span>
+<span id="cb27-13"><a href="#cb27-13" tabindex="-1"></a><span class="co"># Display weeks as week in month in year (e.g. &quot;1970-01-W1&quot;, &quot;1970-01-W2&quot;, ...)</span></span>
+<span id="cb27-14"><a href="#cb27-14" tabindex="-1"></a>S7<span class="sc">::</span><span class="fu">method</span>(</span>
+<span id="cb27-15"><a href="#cb27-15" tabindex="-1"></a>  chronon_format_linear,</span>
+<span id="cb27-16"><a href="#cb27-16" tabindex="-1"></a>  <span class="fu">list</span>(cal_symmetry454<span class="sc">$</span>week, S7<span class="sc">::</span><span class="fu">new_S3_class</span>(<span class="st">&quot;cal_symmetry454&quot;</span>))</span>
+<span id="cb27-17"><a href="#cb27-17" tabindex="-1"></a>) <span class="ot">&lt;-</span> <span class="cf">function</span>(x, cal) <span class="st">&quot;{lin(year(1L))}-{cyc(month(1L), year(1L), label=TRUE, abbreviate=TRUE)}-W{cyc(week(1L), month(1L))}&quot;</span></span>
+<span id="cb27-18"><a href="#cb27-18" tabindex="-1"></a></span>
+<span id="cb27-19"><a href="#cb27-19" tabindex="-1"></a><span class="co"># Format days as day in week in month in year (e.g. &quot;1970-Jan-W1-Mon&quot;, &quot;1970-Jan-W1-Tue&quot;, ...)</span></span>
+<span id="cb27-20"><a href="#cb27-20" tabindex="-1"></a>S7<span class="sc">::</span><span class="fu">method</span>(</span>
+<span id="cb27-21"><a href="#cb27-21" tabindex="-1"></a>  chronon_format_linear,</span>
+<span id="cb27-22"><a href="#cb27-22" tabindex="-1"></a>  <span class="fu">list</span>(cal_symmetry454<span class="sc">$</span>day, S7<span class="sc">::</span><span class="fu">new_S3_class</span>(<span class="st">&quot;cal_symmetry454&quot;</span>))</span>
+<span id="cb27-23"><a href="#cb27-23" tabindex="-1"></a>) <span class="ot">&lt;-</span> <span class="cf">function</span>(x, cal) <span class="st">&quot;{lin(year(1L))}-{cyc(month(1L), year(1L), label=TRUE, abbreviate=TRUE)}-W{cyc(week(1L), month(1L))}-{cyc(day(1L), week(1L), label=TRUE, abbreviate=TRUE)}&quot;</span></span></code></pre></div>
+<p>With these default time formatting strings in place, the linear time
+vectors now have more informative default labels:</p>
+<div class="sourceCode" id="cb28"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb28-1"><a href="#cb28-1" tabindex="-1"></a><span class="co"># Years are formatted as YYYY</span></span>
+<span id="cb28-2"><a href="#cb28-2" tabindex="-1"></a><span class="fu">year</span>(<span class="fu">as.Date</span>(<span class="st">&quot;1955-11-12&quot;</span>), <span class="at">calendar =</span> cal_symmetry454)</span>
+<span id="cb28-3"><a href="#cb28-3" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb28-4"><a href="#cb28-4" tabindex="-1"></a><span class="co">#&gt; [1] 1955</span></span>
+<span id="cb28-5"><a href="#cb28-5" tabindex="-1"></a></span>
+<span id="cb28-6"><a href="#cb28-6" tabindex="-1"></a><span class="co"># Months are formatted as YYYY Mon</span></span>
+<span id="cb28-7"><a href="#cb28-7" tabindex="-1"></a><span class="fu">yearmonth</span>(<span class="fu">as.Date</span>(<span class="st">&quot;1955-11-12&quot;</span>), <span class="at">calendar =</span> cal_symmetry454)</span>
+<span id="cb28-8"><a href="#cb28-8" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb28-9"><a href="#cb28-9" tabindex="-1"></a><span class="co">#&gt; [1] 1955-Nov</span></span>
+<span id="cb28-10"><a href="#cb28-10" tabindex="-1"></a></span>
+<span id="cb28-11"><a href="#cb28-11" tabindex="-1"></a><span class="co"># Weeks are formatted as YYYY-MM-WW</span></span>
+<span id="cb28-12"><a href="#cb28-12" tabindex="-1"></a><span class="fu">yearweek</span>(<span class="fu">as.Date</span>(<span class="st">&quot;1955-11-12&quot;</span>), <span class="at">calendar =</span> cal_symmetry454)</span>
+<span id="cb28-13"><a href="#cb28-13" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb28-14"><a href="#cb28-14" tabindex="-1"></a><span class="co">#&gt; [1] 1955-Nov-W2</span></span>
+<span id="cb28-15"><a href="#cb28-15" tabindex="-1"></a></span>
+<span id="cb28-16"><a href="#cb28-16" tabindex="-1"></a><span class="co"># Days are formatted as YYYY-MM-WW-DD</span></span>
+<span id="cb28-17"><a href="#cb28-17" tabindex="-1"></a><span class="fu">linear_time</span>(<span class="fu">as.Date</span>(<span class="fu">c</span>(<span class="st">&quot;1985-10-26&quot;</span>, <span class="st">&quot;1955-11-05&quot;</span>, <span class="st">&quot;1955-11-12&quot;</span>)), <span class="at">chronon =</span> cal_symmetry454<span class="sc">$</span><span class="fu">day</span>(<span class="dv">1</span><span class="dt">L</span>))</span>
+<span id="cb28-18"><a href="#cb28-18" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[3]&gt;</span></span>
+<span id="cb28-19"><a href="#cb28-19" tabindex="-1"></a><span class="co">#&gt; [1] 1985-Oct-W4-Sat 1955-Nov-W1-Sat 1955-Nov-W2-Sat</span></span></code></pre></div>
+</div>
+<div id="cyclical-time-formats-chronon_format_cyclical" class="section level4">
+<h4>Cyclical time formats: <code>chronon_format_cyclical()</code></h4>
+<p>Cyclical time formats dispatch on the chronon and cycle. Defining
+methods for cyclical time formats is necessary when particular
+formatting with labels is desired (e.g. month of year or day of week
+labels). All other combinations of chronon and cycle will fall back to
+the default format, which combines the time unit abbreviation with the
+cycle label (e.g. “W1” for week 1 of the month or year).</p>
+<div class="sourceCode" id="cb29"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb29-1"><a href="#cb29-1" tabindex="-1"></a><span class="co"># Format months in years as abbreviated month labels (e.g. &quot;Jan&quot;, &quot;Feb&quot;, ...)</span></span>
+<span id="cb29-2"><a href="#cb29-2" tabindex="-1"></a>S7<span class="sc">::</span><span class="fu">method</span>(</span>
+<span id="cb29-3"><a href="#cb29-3" tabindex="-1"></a>  chronon_format_cyclical,</span>
+<span id="cb29-4"><a href="#cb29-4" tabindex="-1"></a>  <span class="fu">list</span>(cal_symmetry454<span class="sc">$</span>month, cal_symmetry454<span class="sc">$</span>year)</span>
+<span id="cb29-5"><a href="#cb29-5" tabindex="-1"></a>) <span class="ot">&lt;-</span> <span class="cf">function</span>(x, y) <span class="st">&quot;{cyc(month,year,label=TRUE,abbreviate=TRUE)}&quot;</span></span></code></pre></div>
+<p>These methods are used when formatting cyclical time vectors, such as
+month of year:</p>
+<div class="sourceCode" id="cb30"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb30-1"><a href="#cb30-1" tabindex="-1"></a><span class="fu">month_of_year</span>(<span class="fu">as.Date</span>(<span class="st">&quot;1955-11-12&quot;</span>), <span class="at">calendar =</span> cal_symmetry454)</span>
+<span id="cb30-2"><a href="#cb30-2" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb30-3"><a href="#cb30-3" tabindex="-1"></a><span class="co">#&gt; [1] Nov</span></span></code></pre></div>
+</div>
+</div>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

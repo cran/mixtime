@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+
+
+<title>Time format strings</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+span.underline{text-decoration: underline;}
+div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+</style>
+
+
+
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">Time format strings</h1>
+
+
+
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(mixtime)</span></code></pre></div>
+<p>mixtime format strings describe how a point in time is formatted as
+text. They are analagous to the time format strings used in
+<code>strptime()</code> and <code>strftime()</code>.</p>
+<div id="time-codes" class="section level2">
+<h2>Time component codes</h2>
+<p>Where <code>strftime()</code> uses <code>%</code>-prefixed codes tied
+to the Gregorian calendar (e.g. <code>%Y</code> for year,
+<code>%m</code> for month), mixtime uses <a href="https://glue.tidyverse.org/">glue</a>-style <code>{...}</code>
+placeholders that refer explicitly to time components defined by linear
+and cyclical granules.</p>
+<table>
+<colgroup>
+<col width="50%" />
+<col width="50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Code</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>lin(granule)</code></td>
+<td>A linear granularity is typically used for the coarsest granule
+(e.g. years).</td>
+</tr>
+<tr class="even">
+<td><code>cyc(granule, cycle)</code></td>
+<td>A cyclical granularity displays finer granules within a coarser
+cycle (e.g. months within years).</td>
+</tr>
+</tbody>
+</table>
+<p>The <code>granule</code> and <code>cycle</code> arguments accept time
+granules from a calendar, for example the format codes for
+<code>yearmonth()</code> are <code>lin(year(1L))</code> and
+<code>cyc(month(1L), year(1L))</code>. These format codes are combined
+in the time format string with glue substitutions:
+<code>&quot;{lin(year(1L))}-{cyc(month(1L), year(1L))}&quot;</code>.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">format</span>(<span class="fu">date</span>(<span class="fu">Sys.Date</span>()), <span class="at">format =</span> <span class="st">&quot;{lin(year(1L))}-{cyc(month(1L), year(1L))}&quot;</span>)</span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a><span class="co">#&gt; [1] &quot;2026-05&quot;</span></span></code></pre></div>
+<p>The linear labels are produced by <code>linear_labels()</code>, and
+the cyclical labels are produced by <code>cyclical_labels()</code>. When
+formatting mixtime vectors, additional arguments passed to
+<code>lin()</code> and <code>cyc()</code> are forwarded to the label
+helper functions. Common arguments include <code>label = TRUE</code> to
+get named labels (e.g. “January”), and <code>abbreviate = TRUE</code>
+for short names (e.g. “Jan” instead of “January”).</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="fu">format</span>(<span class="fu">date</span>(<span class="fu">Sys.Date</span>()), <span class="at">format =</span> <span class="st">&quot;{lin(year)} {cyc(month, year, label = TRUE, abbreviate = TRUE)}&quot;</span>)</span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a><span class="co">#&gt; [1] &quot;2026 May&quot;</span></span></code></pre></div>
+<p>Default format strings for each chronon (and cycle) are provided by
+methods of the <code>chronon_format_linear()</code> and
+<code>chronon_format_cyclical()</code> generics (see
+<code>vignette(&quot;extending-mixtime&quot;)</code>). For example, the default
+format string for a time with a 1-month chronon is
+<code>&quot;{lin(year)}-{cyc(month, year)}&quot;</code>:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="fu">format</span>(<span class="fu">linear_time</span>(<span class="fu">Sys.Date</span>(), <span class="at">chronon =</span> cal_gregorian<span class="sc">$</span><span class="fu">month</span>(<span class="dv">1</span><span class="dt">L</span>)))</span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a><span class="co">#&gt; [1] &quot;2026 May&quot;</span></span></code></pre></div>
+<p>The granules used in the format string are calendar-aware, so they
+inherit attributes from the data being formatted. This includes the
+calendar (e.g. <code>cal_gregorian</code>) and granule attributes
+(e.g. time zone for civil time and location for astronomical time).
+Explicitly specifying the calendar or granule attributes in the format
+string allows different calendars and granule attributes to be combined
+in the same format string.</p>
+<!-- 
+For example, here we display the time in Berlin alongside Melbourne:
+
+
+``` r
+# Default format for a second-resolution chronon is "YYYY-MM-DD HH:MM:SS"
+fmt_time <- chronon_format_linear(cal_gregorian$second(1L))
+mel <- "Australia/Melbourne"
+fmt_time_mel <- "({cyc(hour(1L, tz=mel), day(1L, tz = mel))}:{cyc(minute(1L, tz=mel), hour(1L, tz = mel))}:{cyc(second(1L, tz=mel), minute(1L, tz = mel))} {tz(.time, mel)})"
+format(
+  datetime(Sys.time(), tz = "UTC"), 
+  format = paste(fmt_time, "{tz(.time)}", fmt_time_mel)
+)
+#> [1] "2026-05-13 16:08:45 UTC (16:08:45 AEST)"
+```
+-->
+<p>For example, the lunar phase can be added to a date format string by
+including the <code>phase</code> granule from the
+<code>cal_time_lunar</code> calendar. We can also set
+<code>emoji = TRUE</code> to get a lunar phase emoji instead of a
+numeric index:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>fmt_date  <span class="ot">&lt;-</span> <span class="st">&quot;{lin(year)}-{cyc(month, year)}-{cyc(day, month)}&quot;</span></span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a>fmt_lunar <span class="ot">&lt;-</span> <span class="st">&quot;{with(cal_time_lunar, cyc(phase, month, emoji = TRUE))}&quot;</span></span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a><span class="fu">format</span>(<span class="fu">date</span>(<span class="fu">Sys.Date</span>()), <span class="at">format =</span> <span class="fu">paste</span>(fmt_date, fmt_lunar))</span>
+<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a><span class="co">#&gt; [1] &quot;2026-05-13 🌗&quot;</span></span></code></pre></div>
+<p>This makes the relationship between the format string and the
+calendar structure transparent, and means the same format-string idiom
+works unchanged across calendars.</p>
+</div>
+<div id="advanced-time-formatting" class="section level2">
+<h2>Advanced time formatting</h2>
+<p>In addition to the <code>lin()</code> and <code>cyc()</code> codes,
+mixtime format strings support glue-style expressions that can be used
+to insert arbitrary text and perform calculations on the time
+components. The <code>.time</code> variable is available within the
+format string and refers to the time being formatted. This variable is
+commonly used to display time attributes, including:</p>
+<table>
+<thead>
+<tr class="header">
+<th>Code</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>tz(.time)</code></td>
+<td>Time zone (e.g. <code>AEST</code>)</td>
+</tr>
+<tr class="even">
+<td><code>loc(.time)</code></td>
+<td>Location (e.g. <code>37.81S 144.96E</code>)</td>
+</tr>
+<tr class="odd">
+<td><code>frac(.time)</code></td>
+<td>Fractional chronons (e.g. <code>39.2%</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>The <code>.time</code> argument can be used in any calculation within
+the format string.</p>
+</div>
+<div id="comparison-with-posix-time-format-strings" class="section level2">
+<h2>Comparison with POSIX time format strings</h2>
+<p>POSIX time format strings are concise but require memorising a large
+number of <code>%</code>-prefixed codes which are platform-dependent and
+and mostly specific to the Gregorian calendar. In contrast, mixtime
+format strings are more verbose but more intuitive and generalisable to
+different calendars and time formats.</p>
+<p>An ISO-8601 date (<code>YYYY-MM-DD</code>) is represented with the
+mixtime format string
+<code>&quot;{lin(year)}-{cyc(month, year)}-{cyc(day, month)}&quot;</code>. While
+more verbose than the equivalent <code>strftime</code> format string
+(<code>&quot;%Y-%m-%d&quot;</code>), the mixtime string is more descriptive and
+generalisable to other combinations of granules.</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="co"># YYYY-MM-DD format for a Gregorian date</span></span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a><span class="fu">format</span>(<span class="fu">date</span>(<span class="fu">Sys.Date</span>()), <span class="at">format =</span> <span class="st">&quot;{lin(year)}-{cyc(month, year)}-{cyc(day, month)}&quot;</span>)</span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a><span class="co">#&gt; [1] &quot;2026-05-13&quot;</span></span>
+<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a><span class="fu">format</span>(<span class="fu">Sys.Date</span>(), <span class="at">format =</span> <span class="st">&quot;%Y-%m-%d&quot;</span>)</span>
+<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a><span class="co">#&gt; [1] &quot;2026-05-13&quot;</span></span></code></pre></div>
+<p>This simplifies the construction of less common time formats, for
+example the year-day format (<code>YYYY-DDD</code>), which is
+<code>&quot;{lin(year)}-D{cyc(day, year)}&quot;</code> in mixtime but
+<code>&quot;%Y-D%j&quot;</code> in <code>strftime</code> (where <code>%j</code> is
+a non-obvious code for “day of year”).</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="co"># YYY-DDD format for a Gregorian date</span></span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a><span class="fu">format</span>(<span class="fu">date</span>(<span class="fu">Sys.Date</span>()), <span class="at">format =</span> <span class="st">&quot;{lin(year)}-D{cyc(day, year)}&quot;</span>)</span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a><span class="co">#&gt; [1] &quot;2026-D133&quot;</span></span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a><span class="fu">format</span>(<span class="fu">Sys.Date</span>(), <span class="at">format =</span> <span class="st">&quot;%Y-D%j&quot;</span>)</span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a><span class="co">#&gt; [1] &quot;2026-D133&quot;</span></span></code></pre></div>
+<p>Format strings for non-Gregorian calendars are also more intuitive,
+since the granules are specified in reference to units of calendar
+systems. For example, the format string for ISO week dates
+(<code>YYYY-WW-DDD</code>) is
+<code>&quot;{lin(year)}-W{cyc(week, year)}-{cyc(day, week, label = TRUE)}&quot;</code>
+in mixtime. The equivalent <code>strftime</code> format string
+(<code>&quot;%G-W%V-%a&quot;</code>) requires knowing that
+<code>%G</code>/<code>%V</code> are the ISO week variants of
+<code>%Y</code>/<code>%W</code> - a nuanced distinction that is easy to
+get wrong.</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="co"># YYYY-WW-DD format for a ISO week date</span></span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a><span class="fu">format</span>(</span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>  <span class="fu">date</span>(<span class="fu">Sys.Date</span>(), <span class="at">calendar =</span> cal_isoweek),</span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a>  <span class="at">format =</span> <span class="st">&quot;{lin(year)}-W{cyc(week, year)}-{cyc(day, week, label = TRUE)}&quot;</span></span>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a>)</span>
+<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a><span class="co">#&gt; [1] &quot;2026-W20-Wed&quot;</span></span>
+<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a><span class="fu">format</span>(<span class="fu">Sys.Date</span>(), <span class="at">format =</span> <span class="st">&quot;%G-W%V-%a&quot;</span>)</span>
+<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a><span class="co">#&gt; [1] &quot;2026-W20-Wed&quot;</span></span></code></pre></div>
+<p>The table below maps every
+<code>strftime</code>/<code>strptime</code> conversion specification to
+its mixtime equivalent. There are many more possible mixtime format
+strings that don’t have a direct <code>strftime</code> equivalent.</p>
+<details>
+<summary>
+Show/hide POSIX and mixtime equivalent code table
+</summary>
+<table>
+<colgroup>
+<col width="12%" />
+<col width="62%" />
+<col width="24%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>POSIX</th>
+<th>mixtime</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>%Y</code></td>
+<td><code>{lin(year)}</code></td>
+<td>Year with century (e.g. 2026)</td>
+</tr>
+<tr class="even">
+<td><code>%G</code></td>
+<td><code>{lin(cal_isoweek$year)}</code></td>
+<td>ISO 8601 week-based year (1-53)</td>
+</tr>
+<tr class="odd">
+<td><code>%m</code></td>
+<td><code>{cyc(month, year)}</code></td>
+<td>Month as decimal number (01–12)</td>
+</tr>
+<tr class="even">
+<td><code>%B</code></td>
+<td><code>{cyc(month, year, label = TRUE)}</code></td>
+<td>Full month name (e.g. January)</td>
+</tr>
+<tr class="odd">
+<td><code>%b</code>, <code>%h</code></td>
+<td><code>{cyc(month, year, label = TRUE, abbreviate = TRUE)}</code></td>
+<td>Abbreviated month name (e.g. Jan)</td>
+</tr>
+<tr class="even">
+<td><code>%d</code></td>
+<td><code>{cyc(day, month)}</code></td>
+<td>Day of month (01–31)</td>
+</tr>
+<tr class="odd">
+<td><code>%j</code></td>
+<td><code>{cyc(day, year)}</code></td>
+<td>Day of year (001–366)</td>
+</tr>
+<tr class="even">
+<td><code>%H</code></td>
+<td><code>{cyc(hour, day)}</code></td>
+<td>Hour, 24-hour clock (00–23)</td>
+</tr>
+<tr class="odd">
+<td><code>%I</code></td>
+<td><code>{cyc(hour, ampm)}</code></td>
+<td>Hour, 12-hour clock (01–12)</td>
+</tr>
+<tr class="even">
+<td><code>%p</code></td>
+<td><code>{cyc(ampm, day)}</code></td>
+<td>AM/PM indicator</td>
+</tr>
+<tr class="odd">
+<td><code>%M</code></td>
+<td><code>{cyc(minute, hour)}</code></td>
+<td>Minute (00–59)</td>
+</tr>
+<tr class="even">
+<td><code>%S</code></td>
+<td><code>{cyc(second, minute)}</code></td>
+<td>Second as integer (00–61)</td>
+</tr>
+<tr class="odd">
+<td><code>%A</code></td>
+<td><code>{cyc(day, cal_isoweek$week, label = TRUE)}</code></td>
+<td>Full weekday name (e.g. Monday)</td>
+</tr>
+<tr class="even">
+<td><code>%a</code></td>
+<td><code>{cyc(day, cal_isoweek$week, label = TRUE, abbreviate = TRUE)}</code></td>
+<td>Abbreviated weekday name (e.g. Mon)</td>
+</tr>
+<tr class="odd">
+<td><code>%u</code></td>
+<td><code>{cyc(day, cal_isoweek$week)}</code></td>
+<td>Weekday as numeric (1 = Monday, 7 = Sunday)</td>
+</tr>
+<tr class="even">
+<td><code>%V</code></td>
+<td><code>{with(cal_isoweek, cyc(week, year))}</code></td>
+<td>ISO 8601 week number (01–53)</td>
+</tr>
+<tr class="odd">
+<td><code>%Z</code></td>
+<td><code>{tz(.time)}</code></td>
+<td>Time zone abbreviation (e.g. <code>AEST</code>)</td>
+</tr>
+<tr class="even">
+<td><code>%z</code></td>
+<td><code>+{tz_offset(.time)}</code></td>
+<td>UTC offset (e.g. <code>+1000</code>)</td>
+</tr>
+<tr class="odd">
+<td><code>%s</code></td>
+<td><code>{as.numeric(as.POSIXt(.time))}</code></td>
+<td>Seconds since the Unix epoch</td>
+</tr>
+</tbody>
+</table>
+<!-- 
+Composite types
+| `%F` | `{lin(year)}-{cyc(month, year)}-{cyc(day, month)}` | ISO 8601 date (`%Y-%m-%d`) |
+| `%T` | `{cyc(hour, day)}:{cyc(minute, hour)}:{cyc(second, minute)}` | Time (`%H:%M:%S`) |
+| `%R` | `{cyc(hour, day)}:{cyc(minute, hour)}` | Hours and minutes (`%H:%M`) |
+| `%D` | `{cyc(month, year)}/{cyc(day, month)}/{lin(year) %% 100}` | US date (`%m/%d/%y`) |
+ -->
+<!-- 
+Unsupported types (TODO)
+| `%OS` | `{cyc(second, minute)}{frac(.time)}` | Fractional seconds |
+| `%e` | `{cyc(day, month)}` | Day of month with leading space for single digits |
+| `%W` | `{cyc(week, year)}` | Week of year, Monday as first day (00–53) |
+| `%y` | — | Year without century (00–99); no direct equivalent |
+| `%C` | — | Century (year ÷ 100); no direct equivalent |
+| `%g` | — | Last two digits of ISO week-based year; no direct equivalent |
+| `%w` | — | Weekday as decimal (0 = Sunday); no direct equivalent |
+| `%U` | — | Week of year, Sunday as first day (00–53); no direct equivalent | 
+-->
+</details>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

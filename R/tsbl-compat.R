@@ -1,0 +1,75 @@
+index_valid <- S7::new_external_generic("tsibble", "index_valid", "x")
+method(index_valid, class_mixtime) <- function(x) TRUE
+
+interval_pull <- S7::new_external_generic("tsibble", "interval_pull", "x")
+method(interval_pull, class_mixtime) <- function(x) {
+  intvls <- lapply(x@x, function(x) tsibble::interval_pull(x))
+  x <- new_rcrd(
+    vec_rbind(!!!lapply(intvls, new_data_frame)),
+    .regular = any(vapply(intvls, attr, logical(1L), which = ".regular")),
+    class = c("mixtime_interval", "interval")
+  )
+}
+
+interval_pull.mt_linear <- function(x) {
+  chronon <- time_chronon(x)
+
+  interval <- list(chronon@n)
+  names(interval) <- time_unit_full(chronon)
+
+  rlang::inject(tsibble::new_interval(!!!interval))
+}
+
+#' @export
+format.mixtime_interval <- function(x, ...) {
+  fmt <- vapply(
+    vctrs::new_rcrd(unclass(x)),
+    fmt_interval,
+    # function(y) format(`class<-`(y, "interval")),
+    character(1L)
+  )
+  # tsibble requires length 1 interval formatting
+  paste(unique(fmt), collapse = ", ")
+}
+
+fmt_interval <- function (x, ...) {
+  if (!attr(x, ".regular"))
+    return("!")
+  if (all(vec_proxy(x) == 0))
+    return("?")
+  n <- n_fields(x)
+  micro <- ifelse(cli::is_utf8_output(), "\u00b5s", "us")
+  defaults <- vec_c("Y", "Q", "M", "W", "D", "h", "m", "s",
+                    "ms", micro, "ns", "")
+  n_defaults <- vec_size(defaults)
+  misc <- if (n > n_defaults)
+    vec_slice(fields(x), (n_defaults + 1):n)
+  else NULL
+  fmt_names <- vec_c(defaults, misc)
+  val <- unlist(unclass(x), use.names = FALSE)
+  paste0(val[val != 0], fmt_names[val != 0], collapse = " ")
+}
+
+#' @export
+print.mixtime_interval <- function(x, ...) cat(format(x, ...))
+
+#' @export
+vec_proxy.mixtime_interval <- function(x, ...) {
+  # Bypass tsibble:::unknown_interval length 1 checks
+  apply(new_data_frame(x), 2, sum, simplify = FALSE)
+}
+
+#' @export
+vec_cast.mixtime.yearweek <- function(x, to, ...) {
+  yearweek(as.Date(x))
+}
+
+#' @export
+vec_cast.mixtime.yearmonth <- function(x, to, ...) {
+  yearmonth(as.Date(x))
+}
+
+#' @export
+vec_cast.mixtime.yearquarter <- function(x, to, ...) {
+  yearquarter(as.Date(x))
+}

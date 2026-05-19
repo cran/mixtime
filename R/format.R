@@ -1,0 +1,203 @@
+# called internally by mt_glue_fmt
+mt_unit_display <- function(x, units, parts, ...) {
+  if (is_mt <- inherits(x, "S7_class")) {
+    # Match based on class only, e.g. {year}-{month}-{day}
+    xi <- which(vapply(units, S7::S7_inherits, logical(1L), x))
+    if (length(xi) == 0L) {
+      # This doesn't match one of the expected units, maybe it's not a mixtime S7 class?
+      is_mt <- FALSE
+    } else if (length(xi) > 1L) {
+      # This matches multiple expected units, more precision is needed.
+      cal <- time_calendar(units[[length(units)]])
+      bad_tu <- names(cal)[match(S7_class_id(x), vapply(cal, S7_class_id, character(1L)))]
+      cli::cli_abort(
+        c(
+          "Multiple units match {.code {paste0('{', bad_tu, '}')}} in the mixtime format string.",
+          i =  "Specify chronon size precisely using e.g. {.code {paste0('{', bad_tu, '(1L)}')}}"
+        ),
+        call = NULL
+      )
+    }
+  } else if (is_mt <- S7::S7_inherits(x, mt_unit)) {
+    xi <- vec_match(
+      data.frame(x = vec_data(x), tu = S7_class_id(x)),
+      data.frame(x = vapply(units, function(u) u@n, numeric(1L)), tu = vapply(units, S7_class_id, character(1L)))
+    )
+    # No matches found
+    if (is.na(xi)) {
+      cli::cli_abort(
+        c(
+          "The calendar time unit of {x} {time_unit_full(x)}{cli::qty(x)}{?s} could not be found."
+        ),
+        call = NULL
+      )
+    }
+  }
+  if (is_mt) {
+    # Return cyclical labels for cyclical parts
+    if (xi > 1) return(cyclical_labels(units[[xi]], units[[xi-1L]], parts[[xi]], ...))
+    # Return linear labels for coarsest part
+    return(as.character(parts[[xi]]))
+  } else {
+    as.character(x)
+  }
+}
+
+time_format_default <- function(x) {
+  chronon <- attr(x, "chronon")
+  cycle <- attr(x, "cycle")
+
+  fmt <- if (is.null(cycle)) {
+    chronon_format_linear(chronon)
+  } else {
+    chronon_format_cyclical(chronon, cycle)
+  }
+  
+  # Add fractional
+  if (is.double(x)) fmt <- paste(fmt, "{frac(.time)}")
+  
+  # Add format attributes (e.g. tz or location)
+  fmt <- paste0(fmt, chronon_format_attr(chronon))
+
+  fmt
+}
+
+time_format_impl <- function(x, format = time_format_default(x), ...) {
+  # Obtain core time information
+  chronon <- attr(x, "chronon")
+  cal <- time_calendar(chronon)
+  
+  # Extend evaluation calendar cycle calendar units
+  cycle <- attr(x, "cycle")
+  if (!is.null(cycle)) {
+    cycle_units <- setdiff(names(cal_cyc <- time_calendar(cycle)), names(cal))
+    cal[cycle_units] <- cal_cyc[cycle_units]
+  }
+
+  x_na <- is.na(x)
+  
+  # Create glue evaluation environment
+  as_tu <- function(x) {
+    if (!S7::S7_inherits(x, mt_unit)) x <- x(1L)
+    granule_inherit_props(x, chronon)
+  }
+  env <- rlang::new_environment(
+    data = c(
+      # The calendar units from chronon
+      cal,
+
+      # The label helper functions, returns time units and label options
+      lin = function(granule, ...) structure(list(as_tu(granule)), ...),
+      cyc = function(granule, cycle, ...) {
+        structure(list(as_tu(granule), as_tu(cycle)), ...)
+      },
+
+      # Attribute helper functions
+      tz = tz_abbreviation,
+      loc = function(x) {
+        chronon <- attr(x, "chronon")
+        if (!S7::S7_inherits(mt_loc_unit)) return("")
+        lat <- chronon@lat
+        lon <- chronon@lon
+        alt <- chronon@alt
+        lat_str <- sprintf("%.2f%s", abs(lat), if (lat >= 0) "N" else "S")
+        lon_str <- sprintf("%.2f%s", abs(lon), if (lon >= 0) "E" else "W")
+        if (alt != 0) {
+          paste0(lat_str, " ", lon_str, " ", sprintf("%.0fm", alt))
+        } else {
+          paste0(lat_str, " ", lon_str)
+        }
+      },
+      frac = function(x) {
+        # Apply time zone offset to x, with truncation for discrete time models.
+        x_tz <- tz_offset(x)
+        x <- vec_data(x)
+        if(is.integer(x)) x_tz <- trunc(x_tz)
+        x <- x + x_tz
+        sprintf("%.1f%%", (x - floor(x))*100)
+      },
+        
+      # Attach .time for specialised usage (e.g. tz_abbreviation(.time))
+      list(.time = x)
+    ),
+    parent = rlang::caller_env()
+  )
+
+  fmt <- mt_glue_fmt(format, env = env)
+  fmt_parts <- !vapply(fmt, is.character, logical(1L))
+
+  # Resolve bare S7 class tokens (e.g. from {year}, {month}, {day}) into
+  # lin/cyc lists using the chronon_cardinality graph to order fine->coarse.
+  s7_class_lgl <- vapply(fmt, inherits, logical(1L), "S7_class")
+  if (any(s7_class_lgl)) {
+    bare_units <- vapply(fmt[s7_class_lgl], S7_class_id, character(1L))
+    cal <- time_calendar(x)
+
+    tu_i <- match(
+      bare_units,
+      vapply(cal, S7_class_id, character(1L))
+    )
+
+    cli::cli_abort(
+      c(
+        "Bare time granule tokens are not currently supported in format strings.",
+        i = "Use {.fn lin} for linear (coarsest) units, e.g. {.code {paste0('{lin(', names(cal)[tu_i[1]], ')}')}}}",
+        i = "Use {.fn cyc} for cyclical units, e.g. {.code {paste0('{cyc(', names(cal)[tu_i[1]], ', <coarser_unit>)}')}}"
+      ),
+      call = NULL
+    )
+
+    # class_idx <- which(s7_class_lgl)
+    # class_num <- length(class_idx)
+
+    # # Initialise as time units of size 1L
+    # fmt[class_idx] <- lapply(fmt[class_idx], function(f) f(1L))
+
+    # # Find order of granularity from fine -> coarse
+    # ordered_idx <- class_idx[S7_order_granules(fmt[class_idx])]
+
+    # # Replace string parts such that:
+    # # * finer time units are cyclical with the next coarser
+    # for (i in seq_len(class_num - 1L)) {
+    #   fmt[[ordered_idx[i]]] <- list(fmt[[ordered_idx[i]]], fmt[[ordered_idx[i+1L]]])
+    # }
+    # # * coarsest time unit is linear
+    # fmt[[ordered_idx[class_num]]] <- list(fmt[[ordered_idx[class_num]]])
+  }
+
+  # Compute the numeric parts for display
+  res_split <- split(fmt[fmt_parts], lengths(fmt[fmt_parts]))
+  parts <- chronon_parts(
+    x        = x[!x_na],
+    linear   = unlist(res_split[["1"]], recursive = FALSE),
+    cyclical = res_split[["2"]]
+  )
+
+  # Apply labels
+  parts$linear <- .mapply(
+    function(tu, x) rlang::exec(linear_labels, tu[[1L]], x, !!!attributes(tu)), 
+    dots = list(res_split[["1"]], parts$linear), 
+    MoreArgs = NULL
+  )
+  parts$cyclical <- .mapply(
+    # TODO floor(x) shouldn't be necessary, fix chronon_parts()?
+    function(tu, x) rlang::exec(cyclical_labels, tu[[1L]], tu[[2L]], floor(x), !!!attributes(tu)), 
+    dots = list(res_split[["2"]], parts$cyclical), 
+    MoreArgs = NULL
+  )
+
+  # Insert time labels into format string parts
+  if (any(fmt_parts)) {
+    fmt[fmt_parts] <- unsplit(Filter(length, parts), lengths(fmt[fmt_parts]))
+  }
+
+  # Handle format parts which include NA values (e.g. timezones)
+  if (any(x_na) && any(fmt_inc_na <- lengths(fmt) == length(x))) {
+    fmt[fmt_inc_na] <- lapply(fmt[fmt_inc_na], function(x) x[!x_na])
+  }
+
+  out <- character(length(x))
+  out[!x_na] <- trimws(rlang::exec(paste0, !!!fmt))
+  out[x_na] <- "NA"
+  out
+}
