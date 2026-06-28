@@ -105,8 +105,8 @@ seq.mt_time <- function(
     if (!identical(from_chronon, to_chronon)) {
       cli::cli_abort(c(
         "Incompatible time chronones in {.fn seq}.",
-        "i" = "{.arg from} has {.cls {paste(from_chronon, time_unit_full(from_chronon))}} chronons.",
-        "i" = "{.arg to} has {.cls {paste(to_chronon, time_unit_full(to_chronon))}} chronons."
+        "i" = "{.arg from} has {.cls {paste(from_chronon, time_unit_plural(from_chronon, vec_data(from_chronon)))}} chronons.",
+        "i" = "{.arg to} has {.cls {paste(to_chronon, time_unit_plural(to_chronon, vec_data(to_chronon)))}} chronons."
       ))
     }
   }
@@ -138,6 +138,9 @@ seq.mt_time <- function(
     if (is.numeric(by) && !S7::S7_inherits(by, mt_unit)) {
       by <- S7::S7_class(chronon)(by)
     }
+
+    # Inherit granule properties from `by` if not given in `chronon` granule
+    by <- granule_inherit_props(by, chronon)
     
     # Convert to `from`/`to` time chronons to `by` time chronons
     seq_part <- NULL
@@ -173,10 +176,10 @@ seq.mt_time <- function(
     on_invalid <- match.arg(on_invalid)
     cycle_size <- chronon_cardinality(chronon, by, res)
     # Check if the sequence offset will overflow the cycle
-    if (any(if (by@n < 0) cycle_size >= seq_part else cycle_size <= seq_part)) {
+    if (any(if (by@n < 0) cycle_size >= seq_part else cycle_size <= seq_part, na.rm = TRUE)) {
       if (missing_on_invalid) {
         cli::cli_warn(c(
-          "The cycle offset ({seq_part + 1L} {time_unit_full(chronon)}{cli::qty(seq_part)}{?s}) has produced time points that overflow the {time_unit_full(by)} cycle.",
+          "The cycle offset ({seq_part + 1L} {time_unit_plural(chronon, seq_part + 1L)}) has produced time points that overflow the {time_unit_plural(by, 1L)} cycle.",
           "!" = "Using the nearest valid time points in the cycle, {.code on_invalid = \"nearest\"} (the default).",
           "i" = "Specify {.arg on_invalid} explicitly to suppress this warning."
         ))

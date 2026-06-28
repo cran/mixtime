@@ -46,11 +46,11 @@ cal_gregorian <- new_calendar(
 )
 
 # Time unit labels
-method(time_unit_full, cal_gregorian$year) <- function(x) "year"
+method(time_unit_full, cal_gregorian$year) <- function(x) "year{?/s}"
 method(time_unit_abbr, cal_gregorian$year) <- function(x) "Y"
-method(time_unit_full, cal_gregorian$quarter) <- function(x) "quarter"
+method(time_unit_full, cal_gregorian$quarter) <- function(x) "quarter{?/s}"
 method(time_unit_abbr, cal_gregorian$quarter) <- function(x) "Q"
-method(time_unit_full, cal_gregorian$month) <- function(x) "month"
+method(time_unit_full, cal_gregorian$month) <- function(x) "month{?/s}"
 method(time_unit_abbr, cal_gregorian$month) <- function(x) "M"
 
 # Epoch for years
@@ -119,17 +119,14 @@ method(chronon_cardinality, list(cal_gregorian$day, cal_gregorian$month)) <- fun
 
 ### Chronon casting between Gregorian time granules
 method(chronon_divmod, list(cal_gregorian$day, cal_gregorian$month)) <- function(from, to, x) {
-  # Modulo arithmetic to convert from days to months
-  # if (chronon_cardinality(cal_gregorian$month(1L), to) != 1L) {
-  #   stop("Converting to non-month chronons from days not yet supported", call. = FALSE)
-  # }
-
   # Scale `x` to be 1 day increments
   x_scale <- from@n
   x <- x_scale * x
+  x_int  <- floor(x)
+  x_frac <- x - x_int
 
   # Shift to days since 0000-03-01 (algorithm anchor)
-  z <- x + 719468L
+  z <- x_int + 719468L
   
   # (day) -> (year, month, day) arithmetic
   era   <- (z >= 0L) * (z %/% 146097L) + (z < 0L) * ((z - 146096L) %/% 146097L)
@@ -151,16 +148,20 @@ method(chronon_divmod, list(cal_gregorian$day, cal_gregorian$month)) <- function
 
   list(
     div = res %/% res_scale,
-    mod = day / x_scale # This is in cal_gregorian$day(1L), should be cal_gregorian$day(***?)
+    mod = (day + x_frac) / x_scale
   )
 }
 method(chronon_divmod, list(cal_gregorian$month, cal_gregorian$day)) <- function(from, to, x) {
   # Convert to months since epoch
   x <- from@n * x
-  
-  year <- x%/%12L + 1970L
+
+  # Separate integer and fractional parts to correctly handle fractional months
+  x_int <- floor(x)
+  x_frac <- x - x_int
+
+  year <- x_int %/% 12L + 1970L
   ly <- as.integer(is_leap_year(year))
-  month <- (x%%12L) + 1L
+  month <- (x_int %% 12L) + 1L
 
   # Start of the month in days since epoch
   result <- 
@@ -171,6 +172,10 @@ method(chronon_divmod, list(cal_gregorian$month, cal_gregorian$day)) <- function
     # Days this year before this month
     (367 * month - 362)%/%12 +
     (month > 2) * (-2 + ly) - ly
+
+  # Convert fractional months to fractional days using days in current month
+  days_in_month <- monthdays[month] + (month == 2L) * ly
+  result <- result + x_frac * days_in_month
 
   # Scale by `to` day chronons
   result <- result / to@n
@@ -191,9 +196,11 @@ method(chronon_divmod, list(cal_gregorian$day, cal_gregorian$year)) <- function(
   # Scale `x` to be 1 day increments
   x_scale <- from@n
   x <- x_scale * x
+  x_int  <- floor(x)
+  x_frac <- x - x_int
 
   # Shift to days since 0000-03-01 (algorithm anchor)
-  z     <- x + 719468L
+  z     <- x_int + 719468L
 
   era   <- (z >= 0L) * (z %/% 146097L) + (z < 0L) * ((z - 146096L) %/% 146097L)
   doe   <- z - era * 146097L                      # day-of-era [0, 146096]
@@ -207,8 +214,8 @@ method(chronon_divmod, list(cal_gregorian$day, cal_gregorian$year)) <- function(
   yday <- (doy + 59 + ly) %% (365L + ly)
   
   list(
-    div = year-1970L,
-    mod = yday/x_scale
+    div = year - 1970L,
+    mod = (yday + x_frac) / x_scale
   )
 }
 method(chronon_divmod, list(cal_gregorian$year, cal_gregorian$day)) <- function(from, to, x) {

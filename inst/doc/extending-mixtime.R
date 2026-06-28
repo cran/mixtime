@@ -210,9 +210,9 @@ with(cal_symmetry454, chronon_divmod(day(1L), year(1L), 839L))
 S7::method(chronon_epoch, cal_symmetry454$year) <- function(x) 1970L
 
 ## -----------------------------------------------------------------------------
-S7::method(time_unit_full, cal_symmetry454$year)  <- function(x) "Symmetry454 year"
+S7::method(time_unit_full, cal_symmetry454$year)  <- function(x) "Symmetry454 year{?/s}"
 S7::method(time_unit_abbr, cal_symmetry454$year)  <- function(x) "Y"
-S7::method(time_unit_full, cal_symmetry454$month) <- function(x) "Symmetry454 month"
+S7::method(time_unit_full, cal_symmetry454$month) <- function(x) "Symmetry454 month{?/s}"
 S7::method(time_unit_abbr, cal_symmetry454$month) <- function(x) "M"
 
 ## -----------------------------------------------------------------------------
@@ -318,4 +318,8 @@ S7::method(
 
 ## -----------------------------------------------------------------------------
 month_of_year(as.Date("1955-11-12"), calendar = cal_symmetry454)
+
+## -----------------------------------------------------------------------------
+duration(1L, cal_symmetry454$year(1L))
+duration(3L, cal_symmetry454$month(1L))
 

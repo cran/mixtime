@@ -1,10 +1,11 @@
 #' Solar time unit classes
 #' 
-#' This time calendar contains solar time units, where the boundary of each day
-#' is at apparent solar midnight. Solar events define the `ampm` (midnight and
-#' noon) and `illumination` (dawn, sunrise, sunset, dusk) units.
+#' Time unit constructors for the transit-based solar time system, where the
+#' boundary of each day is at apparent solar midnight. Solar events define the
+#' `ampm` (midnight and noon) and `illumination` (dawn, sunrise, sunset, dusk)
+#' units. `cal_time_solar` is an alias for `cal_time_solar_transit`.
 #'
-#' @format A location-based calendar containing solar time units.
+#' @format A location-based calendar containing transit-based solar time units.
 #' 
 #' @details
 #' The following time units are available in the solar calendar systems.
@@ -54,14 +55,14 @@
 #' supported, it is recommended to use an alternative reference location.
 #' 
 #' @return An S3 list of class `c("cal_time_solar", "mt_calendar")` containing
-#'   the named time unit classes of the solar calendar. Each unit is
+#'   the named time unit classes of the solar transit calendar. Each unit is
 #'   accessible via `$` notation and calling it with a step size and location
 #'   produces a time granule (e.g., 1 solar day granule as
 #'   `cal_time_solar$day(1L, lat = 0, lon = 0)`). Because solar day boundaries
 #'   depend on the observer's position, each unit constructor requires `lat`
 #'   and `lon` arguments.
 #'
-#' @seealso [`cal_time_civil`]
+#' @seealso [`cal_time_civil`], [`cal_time_lunar`]
 #' 
 #' @examples
 #' # Find the current solar time in Melbourne
@@ -69,7 +70,7 @@
 #' 
 #' @name calendar_time_solar
 #' @export
-cal_time_solar <- new_calendar(
+cal_time_solar_transit <- new_calendar(
   day = S7::new_class("tu_solar_day", parent = mt_loc_unit),
   ampm = S7::new_class("tu_solar_ampm", parent = mt_loc_unit),
   hour = S7::new_class("tu_solar_hour", parent = mt_loc_unit),
@@ -81,24 +82,29 @@ cal_time_solar <- new_calendar(
   illumination = S7::new_class("tu_solar_lum", parent = mt_loc_unit)
 )
 
+#' @export
+#' @rdname calendar_time_solar
+cal_time_solar <- cal_time_solar_transit
+
+
 # Time unit labels
-method(time_unit_full, cal_time_solar$day) <- function(x) "day"
+method(time_unit_full, cal_time_solar$day) <- function(x) "day{?/s}"
 method(time_unit_abbr, cal_time_solar$day) <- function(x) "D"
-method(time_unit_full, cal_time_solar$ampm) <- function(x) "halfday"
+method(time_unit_full, cal_time_solar$ampm) <- function(x) "halfday{?/s}"
 method(time_unit_abbr, cal_time_solar$ampm) <- function(x) "HD"
-method(time_unit_full, cal_time_solar$hour) <- function(x) "hour"
+method(time_unit_full, cal_time_solar$hour) <- function(x) "hour{?/s}"
 method(time_unit_abbr, cal_time_solar$hour) <- function(x) "h"
-method(time_unit_full, cal_time_solar$minute) <- function(x) "minute"
+method(time_unit_full, cal_time_solar$minute) <- function(x) "minute{?/s}"
 method(time_unit_abbr, cal_time_solar$minute) <- function(x) "m"
-method(time_unit_full, cal_time_solar$second) <- function(x) "second"
+method(time_unit_full, cal_time_solar$second) <- function(x) "second{?/s}"
 method(time_unit_abbr, cal_time_solar$second) <- function(x) "s"
-method(time_unit_full, cal_time_solar$degree) <- function(x) "degree"
+method(time_unit_full, cal_time_solar$degree) <- function(x) "degree{?/s}"
 method(time_unit_abbr, cal_time_solar$degree) <- function(x) "\u00b0"
-method(time_unit_full, cal_time_solar$arcminute) <- function(x) "arcminute"
+method(time_unit_full, cal_time_solar$arcminute) <- function(x) "arcminute{?/s}"
 method(time_unit_abbr, cal_time_solar$arcminute) <- function(x) "'"
-method(time_unit_full, cal_time_solar$arcsecond) <- function(x) "arcsecond"
+method(time_unit_full, cal_time_solar$arcsecond) <- function(x) "arcsecond{?/s}"
 method(time_unit_abbr, cal_time_solar$arcsecond) <- function(x) "\""
-method(time_unit_full, cal_time_solar$illumination) <- function(x) "illumination phase"
+method(time_unit_full, cal_time_solar$illumination) <- function(x) "illumination phase{?/s}"
 method(time_unit_abbr, cal_time_solar$illumination) <- function(x) "I"
 
 # Default formats

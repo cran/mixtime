@@ -126,7 +126,7 @@ linear_time <- function(
     cli::cli_abort(e$message, call = NULL)
   })
 
-  mixtime(data, chronon = chronon, discrete = discrete)
+  mixtime(data, chronon = chronon, cycle = NULL, discrete = discrete)
 }
 
 #' Linear time helper functions
@@ -251,6 +251,10 @@ vec_math.mt_time <- function(.fn, .x, ...) {
   if (.fn %in% c("is.nan", "is.finite", "is.infinite")) {
     return(vctrs::vec_math_base(.fn, .x, ...))
   }
+  if (.fn %in% c("round", "floor", "ceiling")) {
+    res <- vctrs::vec_math_base(.fn, .x, ...)
+    return(vec_restore(res, .x))
+  }
   stop(sprintf("Math function '%s' not supported for continuous time", .fn), call. = FALSE)
 }
 
@@ -287,14 +291,17 @@ vec_arith.numeric.mt_time <- function(op, x, y, ...) {
 #' @export
 vec_arith.mt_time.mt_duration <- function(op, x, y, ...) {
   if (!op %in% c("+", "-")) {
-    stop("Only additing and subtracting durations are supported for continuous time", call. = FALSE)
+    stop("Only adding and subtracting durations are supported for continuous time", call. = FALSE)
   }
-  cardinality <- chronon_cardinality(
-    time_chronon(x), time_chronon(y),
-    at = vec_data(x)
-  )
-
-  res <- vec_arith_base(op, vec_data(x), vec_data(y) * cardinality, ...)
+  x_chronon <- attr(x, "chronon")
+  y_chronon <- attr(y, "chronon")
+  # `at` must be in units of the coarser chronon (y), not the time's chronon (x)
+  at_y <- floor(chronon_convert_impl(vec_data(x), x_chronon, y_chronon, discrete = FALSE))
+  cardinality <- chronon_cardinality(x_chronon, y_chronon, at = at_y)
+  shift <- vec_data(y) * cardinality
+  # Preserve integer type for discrete time points
+  if (is.integer(vec_data(x))) shift <- as.integer(round(shift))
+  res <- vec_arith_base(op, vec_data(x), shift, ...)
   attributes(res) <- attributes(x)
   res
 }
@@ -302,14 +309,17 @@ vec_arith.mt_time.mt_duration <- function(op, x, y, ...) {
 #' @export
 vec_arith.mt_duration.mt_time <- function(op, x, y, ...) {
   if (!op %in% c("+", "-")) {
-    stop("Only additing and subtracting durations are supported for continuous time", call. = FALSE)
+    stop("Only adding and subtracting durations are supported for continuous time", call. = FALSE)
   }
-  cardinality <- chronon_cardinality(
-    time_chronon(y), time_chronon(x),
-    at = vec_data(y)
-  )
-
-  res <- vec_arith_base(op, vec_data(x) * cardinality, vec_data(y), ...)
+  x_chronon <- attr(x, "chronon")
+  y_chronon <- attr(y, "chronon")
+  # `at` must be in units of the coarser chronon (x the duration), not the time's chronon (y)
+  at_x <- floor(chronon_convert_impl(vec_data(y), y_chronon, x_chronon, discrete = FALSE))
+  cardinality <- chronon_cardinality(y_chronon, x_chronon, at = at_x)
+  shift <- vec_data(x) * cardinality
+  # Preserve integer type for discrete time points
+  if (is.integer(vec_data(y))) shift <- as.integer(round(shift))
+  res <- vec_arith_base(op, shift, vec_data(y), ...)
   attributes(res) <- attributes(y)
   res
 }
@@ -320,14 +330,34 @@ vec_arith.mt_time.mt_time <- function(op, x, y, ...) {
   if (op != "-") {
      stop("Only subtracting two time points is supported for continuous time", call. = FALSE)
   }
-  tu <- chronon_common_impl(list(attr(x, "chronon"), attr(y, "chronon")))
-  res <- vec_arith_base(
-    op,
-    chronon_convert(x, tu, discrete = FALSE),
-    chronon_convert(y, tu, discrete = FALSE),
-    ...
-  )
+  x_chronon <- attr(x, "chronon")
+  y_chronon <- attr(y, "chronon")
+  tu <- chronon_common_impl(list(x_chronon, y_chronon))
+  cx <- chronon_convert(x, tu, discrete = FALSE)
+  cy <- chronon_convert(y, tu, discrete = FALSE)
+  # When a TZ-aware operand uses a coarser granule than the common chronon, the
+  # conversion produces a wall-clock value rather than a UTC-aligned value (the
+  # TZ offset cancels in same-TZ coarser->finer conversions). Subtract the TZ
+  # offset at the wall-clock position to realign to UTC.
+  cx <- tz_wall_clock_to_utc(cx, x_chronon, tu)
+  cy <- tz_wall_clock_to_utc(cy, y_chronon, tu)
+  res <- vec_arith_base(op, cx, cy, ...)
   new_time(res, chronon = tu, class = "mt_duration")
+}
+
+# Correct wall-clock -> UTC alignment for coarser-granule TZ-aware operands.
+# When from_chronon has a non-UTC TZ and is a different (coarser) class than to_chronon,
+# the chronon_convert result is a wall-clock value (the offset was added then canceled).
+# Subtracting the TZ offset at that position restores the true UTC-equivalent value.
+tz_wall_clock_to_utc <- function(value, from_chronon, to_chronon) {
+  if (!S7::S7_inherits(from_chronon, mt_tz_unit)) return(value)
+  from_tz <- tz_name(from_chronon)
+  if (is.na(from_tz) || from_tz == "UTC") return(value)
+  # Same granule class: offset already cancelled correctly (no correction needed)
+  if (identical(S7::S7_class(from_chronon)@name, S7::S7_class(to_chronon)@name)) return(value)
+  # Coarser granule: subtract the TZ offset at the wall-clock position
+  tzo <- get_tz_offset(as.double(value), from_tz)
+  value - tzo
 }
 
 #' @method vec_cast.Date mt_linear
@@ -335,7 +365,7 @@ vec_arith.mt_time.mt_time <- function(op, x, y, ...) {
 vec_cast.Date.mt_linear <- function(x, to, ...) {
   vec_restore(
     # Convert to naive time zone dates
-    chronon_convert(x, cal_gregorian$day(1L, tz = tz_name(attr(x, "chronon")))),
+    chronon_convert(x, cal_gregorian$day(1L, tz = NA_character_)),
     to
   )
 }

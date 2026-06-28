@@ -27,8 +27,7 @@ chronon_format_linear <- new_generic("chronon_format_linear", c("x", "cal"), fun
   S7::S7_dispatch()
 })
 method(chronon_format_linear, list(mt_unit, class_any)) <- function(x, cal) {
-  tu_i <- match(S7_class_id(x), vapply(cal, S7_class_id, character(1L)))
-  paste0(time_unit_abbr(x), "{lin(", names(cal)[tu_i], ")}")
+  paste0(time_unit_abbr(x), "{lin(chronon_common(.time))}")
 }
 
 #' @examples
@@ -41,12 +40,23 @@ method(chronon_format_linear, list(mt_unit, class_any)) <- function(x, cal) {
 #' @export
 chronon_format_cyclical <- new_generic("chronon_format_cyclical", c("x", "y"))
 method(chronon_format_cyclical, list(mt_unit, mt_unit)) <- function(x, y) {
-  cal <- time_calendar(x)
-  tu_i <- match(
-    c(S7_class_id(x), S7_class_id(y)),
-    vapply(cal, S7_class_id, character(1L))
+  paste0(time_unit_abbr(x), "{cyc(chronon_common(.time), chronon_common(time_cycle(.time)))}")
+}
+
+#' @examples
+#' chronon_format_duration(cal_gregorian$year(1L))
+#' chronon_format_duration(cal_gregorian$month(1L))
+#' chronon_format_duration(cal_gregorian$day(1L))
+#' 
+#' @rdname chronon_format
+#' @export
+chronon_format_duration <- new_generic("chronon_format_duration", "x")
+method(chronon_format_duration, mt_unit) <- function(x) {
+  paste0(
+    "{if (is.double(vec_data(.time))) base::format(vec_data(.time), nsmall = 1L) else as.character(vec_data(.time))}",
+    " ",
+    "{time_unit_plural(chronon_common(.time), if (is.double(vec_data(.time))) 2L else vec_data(.time))}"
   )
-  paste0(time_unit_abbr(x), "{cyc(", paste0(names(cal)[tu_i], collapse = ","), ")}")
 }
 
 #' Default formatting strings for chronon attributes

@@ -27,7 +27,7 @@ mt_unit_display <- function(x, units, parts, ...) {
     if (is.na(xi)) {
       cli::cli_abort(
         c(
-          "The calendar time unit of {x} {time_unit_full(x)}{cli::qty(x)}{?s} could not be found."
+          "The calendar time unit of {x} {time_unit_plural(x, vec_data(x))} could not be found."
         ),
         call = NULL
       )
@@ -45,8 +45,12 @@ mt_unit_display <- function(x, units, parts, ...) {
 
 time_format_default <- function(x) {
   chronon <- attr(x, "chronon")
-  cycle <- attr(x, "cycle")
 
+  if (inherits(x, "mt_duration")) {
+    return(chronon_format_duration(chronon))
+  }
+
+  cycle <- attr(x, "cycle")
   fmt <- if (is.null(cycle)) {
     chronon_format_linear(chronon)
   } else {
@@ -74,7 +78,7 @@ time_format_impl <- function(x, format = time_format_default(x), ...) {
     cal[cycle_units] <- cal_cyc[cycle_units]
   }
 
-  x_na <- is.na(x)
+  x_special <- is.na(x) | is.infinite(vec_data(x))
   
   # Create glue evaluation environment
   as_tu <- function(x) {
@@ -87,7 +91,9 @@ time_format_impl <- function(x, format = time_format_default(x), ...) {
       cal,
 
       # The label helper functions, returns time units and label options
-      lin = function(granule, ...) structure(list(as_tu(granule)), ...),
+      lin = function(granule, ...) {
+        structure(list(as_tu(granule)), ...)
+      },
       cyc = function(granule, cycle, ...) {
         structure(list(as_tu(granule), as_tu(cycle)), ...)
       },
@@ -124,7 +130,7 @@ time_format_impl <- function(x, format = time_format_default(x), ...) {
   )
 
   fmt <- mt_glue_fmt(format, env = env)
-  fmt_parts <- !vapply(fmt, is.character, logical(1L))
+  fmt_parts <- vapply(fmt, is.list, logical(1L))
 
   # Resolve bare S7 class tokens (e.g. from {year}, {month}, {day}) into
   # lin/cyc lists using the chronon_cardinality graph to order fine->coarse.
@@ -168,7 +174,7 @@ time_format_impl <- function(x, format = time_format_default(x), ...) {
   # Compute the numeric parts for display
   res_split <- split(fmt[fmt_parts], lengths(fmt[fmt_parts]))
   parts <- chronon_parts(
-    x        = x[!x_na],
+    x        = x[!x_special],
     linear   = unlist(res_split[["1"]], recursive = FALSE),
     cyclical = res_split[["2"]]
   )
@@ -191,13 +197,42 @@ time_format_impl <- function(x, format = time_format_default(x), ...) {
     fmt[fmt_parts] <- unsplit(Filter(length, parts), lengths(fmt[fmt_parts]))
   }
 
-  # Handle format parts which include NA values (e.g. timezones)
-  if (any(x_na) && any(fmt_inc_na <- lengths(fmt) == length(x))) {
-    fmt[fmt_inc_na] <- lapply(fmt[fmt_inc_na], function(x) x[!x_na])
+  # Handle format parts which include special values (e.g. timezones)
+  if (any(x_special) && any(fmt_inc_special <- lengths(fmt) == length(x))) {
+    fmt[fmt_inc_special] <- lapply(fmt[fmt_inc_special], function(x) x[!x_special])
   }
 
   out <- character(length(x))
-  out[!x_na] <- trimws(rlang::exec(paste0, !!!fmt))
-  out[x_na] <- "NA"
+  out[!x_special] <- trimws(rlang::exec(paste0, !!!fmt))
+  out[x_special] <- format(vec_data(x)[x_special])
   out
+}
+
+#' @export
+format.mt_time <- function(x, format = time_format_default(x), ...) {
+  time_format_impl(x, format = format, ...)
+}
+
+#' @export
+str.mt_linear <- function(object, vec.len = getOption("str")$vec.len %||% 4L, ...) {
+  cat("linear<", format(time_chronon(object)[1L]), "> [1:", length(object), "] ", .mt_str_values(object, vec.len), "\n", sep = "")
+}
+
+#' @export
+str.mt_cyclical <- function(object, vec.len = getOption("str")$vec.len %||% 4L, ...) {
+  cat("cyclical<", format(time_chronon(object)[1L]), "/", format(time_cycle(object)[1L]), "> [1:", length(object), "] ", .mt_str_values(object, vec.len), "\n", sep = "")
+}
+
+#' @export
+str.mt_duration <- function(object, vec.len = getOption("str")$vec.len %||% 4L, ...) {
+  cat("duration<", format(time_chronon(object)[1L]), "> [1:", length(object), "] ", .mt_str_values(object, vec.len), "\n", sep = "")
+}
+
+.mt_str_values <- function(x, vec_len) {
+  vals <- format(x)
+  if (length(vals) > vec_len) {
+    paste0(paste0(vals[seq_len(vec_len)], collapse = " "), " ...")
+  } else {
+    paste0(vals, collapse = " ")
+  }
 }

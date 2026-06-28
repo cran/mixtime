@@ -1,3 +1,36 @@
+# mixtime 0.2.0
+
+## New features
+
+* Added support for multiplication and division of time durations.
+* Added `round()`/`floor()`/`ceiling()` methods for rounding time by chronons.
+  (note: use `time_round()`, `time_floor()`, and `time_ceiling()` for rounding
+  to a specified time granule).
+* Added casting from time durations to character vectors.
+* Added explicit conversion to naive time by using `tz = NA`.
+
+## Improvements
+
+* `time_unit_full()` now uses cli-style pluralisation templates (e.g.,
+  `"year{?/s}"`, `"centur{?y/ies}"`), enabling accurate plural forms beyond a
+  simple `s` suffix. A new `time_unit_plural(x, n)` helper resolves the
+  template for a given quantity.
+* Continuous time model durations now always show at least one decimal place.
+* Added formatting support for `NaN`, `Inf`, and `-Inf` values in time types.
+* Added time zone support for arithmetic.
+* Time durations now use the same formatting system and format strings as linear
+  and cyclical time.
+* Improved `str()` output to be more compact for each time type.
+
+## Bug fixes
+
+* Fixed incorrect usage of `time_chronon()` causing arithmetic to fail.
+* Fixed incompatibilities with vctrs sorting, ptype2, and casting methods.
+* Fixed formatting of cyclical time with mixed-calendar chronon and cycle (#62).
+* Fixed divmod of Gregorian day -> month and day -> year producing incorrect
+  divisors near the year boundary for continuous time dates.
+* Fixed `c()` allowing non-time vectors in mixtime vectors.
+
 # mixtime 0.1.0
 
 This is the initial CRAN release of the package with provides the core data 

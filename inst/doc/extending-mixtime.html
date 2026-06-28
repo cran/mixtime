@@ -377,7 +377,8 @@ components of time with <code>linear_labels()</code>,
 <code>cyclical_labels()</code></li>
 <li><a href="#time-formats">Time formats</a>: default format strings
 with <code>chronon_format_linear()</code>,
-<code>chronon_format_cyclical()</code></li>
+<code>chronon_format_cyclical()</code>,
+<code>chronon_format_duration()</code></li>
 </ul></li>
 </ul>
 <p>The mixtime package uses S7 for all extension methods. If you are new
@@ -829,17 +830,22 @@ methods return format strings that are parsed by
 <h3>Time units</h3>
 <p>Each time unit has two format methods:</p>
 <ul>
-<li><code>time_unit_full()</code> returns the singular full name of the
-unit (e.g. “Symmetry454 year”)</li>
+<li><code>time_unit_full()</code> returns the full name of the unit,
+optionally with cli plural marker
+(e.g. <code>&quot;Symmetry454 year{?/s}&quot;</code>)</li>
 <li><code>time_unit_abbr()</code> returns the short abbreviation of the
 unit (e.g. “Y”)</li>
 </ul>
 <p>The full name is used in messages (e.g. “Can’t convert from
 Symmetry454 year to day”) and the abbreviation is used for displaying
 time intervals and durations.</p>
-<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" tabindex="-1"></a>S7<span class="sc">::</span><span class="fu">method</span>(time_unit_full, cal_symmetry454<span class="sc">$</span>year)  <span class="ot">&lt;-</span> <span class="cf">function</span>(x) <span class="st">&quot;Symmetry454 year&quot;</span></span>
+<p>The plural marker uses <code>{?singular_suffix/plural_suffix}</code>
+syntax. Irregular plurals use the full form,
+e.g. <code>&quot;centur{?y/ies}&quot;</code>. The default is to suffix with “s”
+for plurals (i.e. <code>{?/s}</code>).</p>
+<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" tabindex="-1"></a>S7<span class="sc">::</span><span class="fu">method</span>(time_unit_full, cal_symmetry454<span class="sc">$</span>year)  <span class="ot">&lt;-</span> <span class="cf">function</span>(x) <span class="st">&quot;Symmetry454 year{?/s}&quot;</span></span>
 <span id="cb18-2"><a href="#cb18-2" tabindex="-1"></a>S7<span class="sc">::</span><span class="fu">method</span>(time_unit_abbr, cal_symmetry454<span class="sc">$</span>year)  <span class="ot">&lt;-</span> <span class="cf">function</span>(x) <span class="st">&quot;Y&quot;</span></span>
-<span id="cb18-3"><a href="#cb18-3" tabindex="-1"></a>S7<span class="sc">::</span><span class="fu">method</span>(time_unit_full, cal_symmetry454<span class="sc">$</span>month) <span class="ot">&lt;-</span> <span class="cf">function</span>(x) <span class="st">&quot;Symmetry454 month&quot;</span></span>
+<span id="cb18-3"><a href="#cb18-3" tabindex="-1"></a>S7<span class="sc">::</span><span class="fu">method</span>(time_unit_full, cal_symmetry454<span class="sc">$</span>month) <span class="ot">&lt;-</span> <span class="cf">function</span>(x) <span class="st">&quot;Symmetry454 month{?/s}&quot;</span></span>
 <span id="cb18-4"><a href="#cb18-4" tabindex="-1"></a>S7<span class="sc">::</span><span class="fu">method</span>(time_unit_abbr, cal_symmetry454<span class="sc">$</span>month) <span class="ot">&lt;-</span> <span class="cf">function</span>(x) <span class="st">&quot;M&quot;</span></span></code></pre></div>
 <p>The time unit abbreviations are also used in the default time
 formatting string, so we can now create and view a Symmetry454 linear
@@ -1079,6 +1085,19 @@ month of year:</p>
 <div class="sourceCode" id="cb30"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb30-1"><a href="#cb30-1" tabindex="-1"></a><span class="fu">month_of_year</span>(<span class="fu">as.Date</span>(<span class="st">&quot;1955-11-12&quot;</span>), <span class="at">calendar =</span> cal_symmetry454)</span>
 <span id="cb30-2"><a href="#cb30-2" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
 <span id="cb30-3"><a href="#cb30-3" tabindex="-1"></a><span class="co">#&gt; [1] Nov</span></span></code></pre></div>
+</div>
+<div id="duration-formats-chronon_format_duration" class="section level4">
+<h4>Duration formats: <code>chronon_format_duration()</code></h4>
+<p>Duration vectors (created with <code>duration()</code>) are formatted
+using <code>chronon_format_duration()</code>, which dispatches on the
+chronon. The default method is usually sufficient, which uses
+<code>time_unit_full()</code> to produce a label for the duration.</p>
+<div class="sourceCode" id="cb31"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb31-1"><a href="#cb31-1" tabindex="-1"></a><span class="fu">duration</span>(<span class="dv">1</span><span class="dt">L</span>, cal_symmetry454<span class="sc">$</span><span class="fu">year</span>(<span class="dv">1</span><span class="dt">L</span>))</span>
+<span id="cb31-2"><a href="#cb31-2" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb31-3"><a href="#cb31-3" tabindex="-1"></a><span class="co">#&gt; [1] 1 Symmetry454 year</span></span>
+<span id="cb31-4"><a href="#cb31-4" tabindex="-1"></a><span class="fu">duration</span>(<span class="dv">3</span><span class="dt">L</span>, cal_symmetry454<span class="sc">$</span><span class="fu">month</span>(<span class="dv">1</span><span class="dt">L</span>))</span>
+<span id="cb31-5"><a href="#cb31-5" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb31-6"><a href="#cb31-6" tabindex="-1"></a><span class="co">#&gt; [1] 3 Symmetry454 months</span></span></code></pre></div>
 </div>
 </div>
 </div>
