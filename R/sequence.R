@@ -1,14 +1,14 @@
 #' Generate sequences of mixtime values
-#' 
+#'
 #' Create regular sequences of time values. This method handles both linear
 #' time sequences (dates, date-times) and cyclical time sequences (day of week,
 #' month of year).
-#' 
+#'
 #' @param from Starting value of the sequence.
 #' @param to End value of the sequence (if provided).
 #' @param by Increment of the sequence. Can be:
 #'   * A numeric for the number of time chronons
-#'   * A character string specifying the interval (e.g., "1 day", "2 weeks", 
+#'   * A character string specifying the interval (e.g., "1 day", "2 weeks",
 #'     "1 month", "1 year")
 #'   * A time granule object created with time unit functions (e.g., `cal_gregorian$year(1L)`,
 #'     `cal_gregorian$month(1L)`, `cal_gregorian$day(1L)`)
@@ -18,77 +18,83 @@
 #' @param on_invalid How to handle time points that overflow the cycle when
 #'   using a `by` argument with different time granule than the sequence chronon.
 #'   Options are:
-#'   * `"nearest"` (default): Adjust overflowing time points to the nearest 
+#'   * `"nearest"` (default): Adjust overflowing time points to the nearest
 #'     valid time point within the cycle
 #'   * `"overflow"`: Allow time points to overflow into the next cycle
-#'   
+#'
 #'   This is relevant when the starting time point has an offset that doesn't
 #'   exist in all cycles. For example, starting on day 31 with `by = "1 month"`
 #'   will overflow in months with fewer than 31 days (e.g., February). With
 #'   `"nearest"`, these will be adjusted to the last day of the month (e.g.,
 #'   Feb 28/29). With `"overflow"`, the extra days carry into the next month.
-#'   
+#'
 #'   If not explicitly specified and overflow occurs, a warning is issued with
 #'   the default `"nearest"` behavior applied.
 #' @param ... Additional arguments passed to the underlying sequence method.
-#' 
+#'
 #' @return A mixtime vector containing the sequence.
-#' 
+#'
 #' @details
 #' For linear time types (Date, POSIXct, yearmonth, etc.), sequences progress
-#' forward or backward in time. For cyclical time types (month_of_year, 
+#' forward or backward in time. For cyclical time types (month_of_year,
 #' day_of_week, etc.), sequences wrap around cyclically.
 #' 
 #' @examples
 #' # Linear time sequences with integer by
-#' seq(yearmonth("2020-01-01"), yearmonth("2020-12-01"))
-#' seq(yearquarter("2020-01-01"), length.out = 5, by = 3)
-#' 
+#' seq(yearmonth("2020 Jan"), yearmonth("2020 Dec"))
+#' seq(yearquarter("2020 Q1"), length.out = 5, by = 3)
+#'
 #' # Linear time sequences with string intervals
 #' seq(date("2020-01-01"), date("2020-12-31"), by = "1 month")
-#' seq(yearmonth("2020-01-01"), yearmonth("2025-01-01"), by = "1 year")
+#' seq(yearmonth("2020 Jan"), yearmonth("2025 Jan"), by = "1 year")
 #' seq(date("2020-01-01"), length.out = 10, by = "2 weeks")
-#' 
+#'
 #' # Linear time sequences incrementing by time granules
-#' seq(yearmonth("2020-01-01"), yearmonth("2020-12-01"), by = cal_gregorian$month(2L))
+#' seq(yearmonth("2020 Jan"), yearmonth(("2020 Dec")), by = cal_gregorian$month(2L))
 #' seq(date("2020-01-01"), length.out = 5, by = cal_gregorian$year(1L))
 #' seq(date("2020-01-01"), date("2020-01-31"), by = cal_gregorian$day(7L))
-#' 
+#'
 #' # Handling invalid dates with on_invalid
 #' seq(date("2020-01-31"), length.out = 3, by = "1 month")  # warns, uses nearest
 #' seq(date("2020-01-31"), length.out = 3, by = "1 month", on_invalid = "nearest")
 #' seq(date("2020-01-31"), length.out = 3, by = "1 month", on_invalid = "overflow")
-#' 
+#'
 #' # Cyclical time sequences
 #' seq(month_of_year(0L), month_of_year(11L))
 #' seq(day_of_week(0L), day_of_week(6L), by = 1)
-#' 
+#'
 #' @rdname seq.mixtime
 #' @method seq mixtime::mixtime
 #' @export
 `seq.mixtime::mixtime` <- function(...) {
   # Strip mixtime vecvec wrapper
   arg <- lapply(
-    rlang::list2(...), 
-    function(x) if(is_mixtime(x)) vecvec::unvecvec(x) else x
+    rlang::list2(...),
+    function(x) if (is_mixtime(x)) vecvec::unvecvec(x) else x
   )
-  
+
   # Call seq method with bare vectors
   new_mixtime(rlang::exec(seq, !!!arg))
 }
 
 #' @rdname seq.mixtime
+#' @method seq mixtime::mt_time
 #' @export
-seq.mt_time <- function(
-  from, to, by, length.out = NULL, along.with = NULL, 
-  on_invalid = c("nearest", "overflow"), ...
+`seq.mixtime::mt_time` <- function(
+  from,
+  to,
+  by,
+  length.out = NULL,
+  along.with = NULL,
+  on_invalid = c("nearest", "overflow"),
+  ...
 ) {
   if (!is.null(along.with)) {
     length.out <- length(along.with)
-  }
-  else if (!is.null(length.out)) {
-    if (length(length.out) != 1L) 
+  } else if (!is.null(length.out)) {
+    if (length(length.out) != 1L) {
       stop(sprintf("'%s' must be of length 1", length.out))
+    }
     length.out <- ceiling(length.out)
   }
 
@@ -100,30 +106,32 @@ seq.mt_time <- function(
   if (!missing_from && !missing_to) {
     from_chronon <- chronon_common(from)
     to_chronon <- chronon_common(to)
-    
+
     # Check that from and to have the same time classes
     if (!identical(from_chronon, to_chronon)) {
       cli::cli_abort(c(
         "Incompatible time chronones in {.fn seq}.",
-        "i" = "{.arg from} has {.cls {paste(from_chronon, time_unit_plural(from_chronon, vec_data(from_chronon)))}} chronons.",
-        "i" = "{.arg to} has {.cls {paste(to_chronon, time_unit_plural(to_chronon, vec_data(to_chronon)))}} chronons."
+        "i" = "{.arg from} has {.cls {time_granule_label(from_chronon)}} chronons.",
+        "i" = "{.arg to} has {.cls {time_granule_label(to_chronon)}} chronons."
       ))
     }
   }
-  ptype <- if(missing_from) to else from
-  
+  ptype <- if (missing_from) to else from
+
   if (!missing_by) {
     # If by is provided, exactly two of from/to/length.out must be specified
     n_provided <- sum(!missing_from, !missing_to, !is.null(length.out))
     if (n_provided != 2L) {
-      cli::cli_abort("When {.arg by} is provided, exactly two of {.arg from}, {.arg to}, or {.arg length.out} must be specified.")
+      cli::cli_abort(
+        "When {.arg by} is provided, exactly two of {.arg from}, {.arg to}, or {.arg length.out} must be specified."
+      )
     }
 
     # Allow duration input for by, but convert to granule
     if (length(by) != 1L) {
       cli::cli_abort("{.var by} must be a single time duration", call. = FALSE)
     }
-    if (is_time_duration(by)) {
+    if (time_is_duration(by)) {
       by_size <- as.numeric(by)
       by <- attr(by, "chronon")
       by@n <- by@n * by_size
@@ -133,63 +141,116 @@ seq.mt_time <- function(
     chronon <- chronon_common(ptype)
 
     # Parse `by` argument
-    if (is.character(by)) by <- parse_time_unit(by)
+    if (is.character(by)) {
+      by <- parse_time_unit(by)
+    }
     # Numeric `by` uses chronon
-    if (is.numeric(by) && !S7::S7_inherits(by, mt_unit)) {
+    if (is.numeric(by) && !S7_inherits(by, mt_unit)) {
       by <- S7::S7_class(chronon)(by)
     }
 
     # Inherit granule properties from `by` if not given in `chronon` granule
     by <- granule_inherit_props(by, chronon)
-    
-    # Convert to `from`/`to` time chronons to `by` time chronons
+
+    # Calendar-field clamping applies when `by` has an irregular cardinality
+    # with the `chronon`; the irregularity potentially allows for out-of-range
+    # time points (e.g. 30 Jan -> 30 Feb is invalid, because day<->month is
+    # irregular). Rounding to the nearest valid time point impacts other time
+    # components (e.g. the time of the day), which is usually undesirable.
+    path <- if (chronon_needs_clamping(chronon, by)) {
+      chronon_longest_path(chronon, by)
+    }
+
+    # Convert `from`/`to` time chronons to `by` time chronons. `align_value` records whichever
+    # of `from`/`to` ends up determining `seq_part` (the sequence's within-`by` remainder) -
+    # it's what the reconstruction below decomposes for the clamped path.
     seq_part <- NULL
+    align_value <- NULL
     # Increment by 1 since the time point chronon is rebased with `by`
     arg <- list(by = 1L)
+    # `chronon_divmod()`/`chronon_decompose()` work on a UTC(-shaped) numeric
+    # value, but for the clamped path a `by` boundary (e.g. "start of month")
+    # is defined on the local wall clock, so shift into local time first for
+    # that case - the same convention `chronon_parts()` uses. Regular
+    # (fixed-cardinality) `by` granules like hour/day are stepped as raw
+    # durations instead (matching e.g. `seq.POSIXt()`), so they're left alone.
+    to_by_domain <- if (is.null(path)) {
+      function(x) x
+    } else {
+      function(x) tz_to_local(x, chronon, tz_name(by))
+    }
     if (!missing_from) {
       # Convert `from` into `by` chronons
-      divmod <- chronon_divmod(chronon, by, as.numeric(from))
+      from_local <- to_by_domain(as.numeric(from))
+      divmod <- chronon_divmod(chronon, by, from_local)
       arg$from <- divmod$div
 
       # Left aligned sequencing
       seq_part <- divmod$mod
+      align_value <- from_local
     }
     if (!missing_to) {
       # Shift `to` left to account for `from` alignment
-      if (!is.null(seq_part)) to <- to - seq_part
+      if (!is.null(seq_part)) {
+        to <- to - seq_part
+      }
 
       # Convert `to` into `by` chronons
-      divmod <- chronon_divmod(chronon, by, as.numeric(to))
+      to_local <- to_by_domain(as.numeric(to))
+      divmod <- chronon_divmod(chronon, by, to_local)
       arg$to <- divmod$div
-      
+
       # Right aligned sequencing if from isn't provided
-      seq_part <- seq_part %||% divmod$mod
+      if (is.null(seq_part)) {
+        seq_part <- divmod$mod
+        align_value <- to_local
+      }
     }
-    if (!is.null(length.out)) arg$length.out <- length.out
+    if (!is.null(length.out)) {
+      arg$length.out <- length.out
+    }
 
     res <- rlang::exec(seq.int, !!!arg)
-    # TODO: safely add the seq_part to handle invalid dates without overflow
-    #       (essentially, check the cardinality to see if seq_part overflows it)
-    # This should be the default (also add detection if it applies, then give a warning if the argument is not explicitly provided)
-    
+
     missing_on_invalid <- is.character(on_invalid) && length(on_invalid) > 1L
     on_invalid <- match.arg(on_invalid)
-    cycle_size <- chronon_cardinality(chronon, by, res)
-    # Check if the sequence offset will overflow the cycle
-    if (any(if (by@n < 0) cycle_size >= seq_part else cycle_size <= seq_part, na.rm = TRUE)) {
-      if (missing_on_invalid) {
+
+    # Reconstruct `chronon` units from `by`-unit counts (from seq.int())
+    #
+    # If sequenced by an irregular cardinality (`path` is non-NULL), use
+    # clamping to return component-by-component valid time points.
+    #
+    # Otherwise, regular cardinality can be directly converted and always
+    # produce valid time points.
+    if (is.null(path)) {
+      res <- chronon_convert_impl(
+        res,
+        by,
+        chronon,
+        discrete = is.integer(ptype)
+      ) +
+        seq_part
+    } else {
+      seq_mod <- chronon_decompose(align_value, path)$mod
+      recomposed <- chronon_recompose(
+        res,
+        seq_mod,
+        path,
+        clamp = on_invalid == "nearest"
+      )
+
+      if (missing_on_invalid && any(recomposed$clamped, na.rm = TRUE)) {
         cli::cli_warn(c(
-          "The cycle offset ({seq_part + 1L} {time_unit_plural(chronon, seq_part + 1L)}) has produced time points that overflow the {time_unit_plural(by, 1L)} cycle.",
+          "The cycle offset ({time_granule_label(chronon, seq_part + 1L)}) has produced time points that overflow the {time_unit_plural(by, 1L)} cycle.",
           "!" = "Using the nearest valid time points in the cycle, {.code on_invalid = \"nearest\"} (the default).",
           "i" = "Specify {.arg on_invalid} explicitly to suppress this warning."
         ))
       }
-      if (on_invalid == "nearest") {
-        seq_part <- (if (by@n < 0) pmax else pmin)(cycle_size - 1L, seq_part)
-      }
+      # `chronon_recompose()` stays in the local-shifted domain used by
+      # `align_value` above - undo the shift to recover the true `chronon`
+      # value.
+      res <- tz_to_utc(recomposed$value, chronon, tz_name(by))
     }
-    
-    res <- chronon_convert_impl(res, by, chronon, discrete = is.integer(res)) + seq_part
 
     # Restore integer type for discrete time input
     if (is.integer(ptype)) res <- as.integer(res)
@@ -197,16 +258,22 @@ seq.mt_time <- function(
     # If by is missing, at least two of from/to/length.out must be specified
     n_provided <- sum(!missing_from, !missing_to, !is.null(length.out))
     if (n_provided < 2L) {
-      cli::cli_abort("When {.arg by} is missing, at least two of {.arg from}, {.arg to}, or {.arg length.out} must be specified.")
+      cli::cli_abort(
+        "When {.arg by} is missing, at least two of {.arg from}, {.arg to}, or {.arg length.out} must be specified."
+      )
     }
 
     arg <- list(length.out = length.out)
-    if (!missing_from) arg$from <- as.numeric(from)
-    if (!missing_to) arg$to <- as.numeric(to)
-    
+    if (!missing_from) {
+      arg$from <- as.numeric(from)
+    }
+    if (!missing_to) {
+      arg$to <- as.numeric(to)
+    }
+
     res <- rlang::exec(seq.int, !!!arg)
   }
-  
+
   vec_restore(res, ptype)
 }
 
@@ -217,7 +284,7 @@ seq.mt_time <- function(
 #     length.out <- length(along.with)
 #   }
 #   else if (!is.null(length.out)) {
-#     if (length(length.out) != 1L) 
+#     if (length(length.out) != 1L)
 #       stop(sprintf("'%s' must be of length 1", length.out))
 #     length.out <- ceiling(length.out)
 #   }
@@ -228,7 +295,7 @@ seq.mt_time <- function(
 #   if (!is.null(length.out)) arg$length.out <- length.out
 #   # NB: Passing along.with = NULL to seq.int causes an overflow in R
 #   if (!is.null(along.with)) arg$along.with <- along.with
-  
+
 #   # Parse `by` argument
 #   if (is.character(arg$by)) arg$by <- parse_time_unit(arg$by)
 
@@ -260,7 +327,7 @@ seq.mt_time <- function(
 #   }
 
 #   # Convert `by` to match `ptype` units
-#   if (!is.null(arg$by) && S7::S7_inherits(arg$by, mt_unit)) {
+#   if (!is.null(arg$by) && S7_inherits(arg$by, mt_unit)) {
 #     arg$by <- chronon_cardinality(time_chronon(ptype), arg$by)
 #   }
 
@@ -269,10 +336,10 @@ seq.mt_time <- function(
 
 #   # Compute cyclical component
 #   res <- res %% period
-  
+
 #   # Restore integer type for discrete time input
 #   if (is.integer(ptype)) res <- as.integer(res)
-  
+
 #   # Restore cyclical time attributes
 #   vec_restore(res, ptype)
 # }

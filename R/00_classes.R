@@ -1,6 +1,6 @@
 #' Base S7 class for creating new time units
 #' 
-#' This class is the primative class for time units, and should 
+#' This class is the primitive class for time units, and should
 #' be extended from when creating new time units. A new class
 #' is typically created with S7 using: 
 #' `S7::new_class("tu_***", parent = mt_tz_unit)`
@@ -16,14 +16,25 @@
 #' constructor functions accessible via `$` notation (e.g., `calendar$day(1L)`).
 #' 
 #' @section Calendar Algebra Methods:
-#' 
-#' Time units enable calendar arithmetic through two key generic methods
+#'
+#' Time units enable calendar arithmetic through key generic methods
 #' that should be implemented for custom time units:
-#' 
+#'
+#' * `chronon_cardinality_fixed(x, y)` - Returns the number of unit `x`
+#'   granules that fit within one unit `y` granule, for relationships that are
+#'   a constant, context-independent number (e.g., 7 days per week, 24 hours
+#'   per day). Prefer this over `chronon_cardinality()` whenever the
+#'   relationship does not depend on `at`, since it is also used to determine
+#'   which relationships are safe to use for [chronon_divmod()]'s graph
+#'   traversal.
+#'
 #' * `chronon_cardinality(x, y, at)` - Returns the number of `x` granule
-#'   that fit within one `y` granule This can be a fixed value (e.g.,
-#'   7 days per week) or variable based on `at` (e.g., 28-31 days per month).
-#'   
+#'   that fit within one `y` granule. This is variable based on `at` (e.g.,
+#'   28-31 days per month). Only implement this directly (rather than
+#'   `chronon_cardinality_fixed()`) when the relationship genuinely depends on
+#'   `at`, and pair it with a direct `chronon_divmod()` method so that the
+#'   relationship remains reachable during graph traversal.
+#'
 #' * `chronon_divmod(x, from, to)` - Converts time point `x` from granules of
 #'   `from` to granules of `to`, returning a list with `div` (the quotient)
 #'   and `mod`. This enables conversions between granules that have
@@ -35,8 +46,8 @@
 #' arithmetic, understanding that months have variable lengths and handling
 #' timezone-aware conversions.
 #' 
-#' @param n The step size of time granule. For example, `n = 2L` is 2 time units -
-#'   for `cal_isoweek$week(2L)` that would be 2 weeks (a fortnight).
+#' @param n The step size of time granule. For example, `n = 2L` is 2 time 
+#'   units, and `cal_isoweek$week(2L)` would represent 2 weeks (a fortnight).
 #' 
 #' @return A time granule object of class `mt_unit`
 #' 
@@ -71,6 +82,93 @@ mt_unit <- S7::new_class(
   #     paste0("@n must be length 1 <numeric> value, not length ", length(self@n), ".")
   #   }
   # }
+)
+
+#' Time vector classes
+#'
+#' @description
+#' The `mt_time` family are the S7 vector classes that store time points as a
+#' numeric count of chronons. `mt_time` is the (internal) base class carrying 
+#' the `chronon` property; the common modes of time are:
+#'
+#' * `mt_linear` - linear time points, typically produced with [linear_time()].
+#' * `mt_cyclical` - cyclical time points with additional `cycle` granule, 
+#'   typically produced with [cyclical_time()].
+#' * `mt_duration` - time durations, typically produced with [duration()].
+#'
+#' The underlying data can be either **integer** (discrete time) or **double**
+#' (continuous time). The `chronon` (and, for `mt_cyclical`, the `cycle`) are 
+#' time granules, the result from a [mt_unit] object.
+#'
+#' @param .data A numeric vector of chronon counts (integer or double).
+#' @param chronon,cycle Time granules ([mt_unit] objects) giving the unit of the
+#'   chronon counts and, for `mt_cyclical`, the length of the cycle.
+#'
+#' @return An S7 class object (used for method dispatch), or a time vector when
+#'   called as a constructor.
+#'
+#' @seealso [mt_linear()], [mt_duration()], and [mt_cyclical()] to construct
+#'   time vectors, and [mt_unit] for the granule type stored in `chronon`/`cycle`.
+#'
+#' @name mt_time-class
+NULL
+
+# Lightweight S3 carrier for the mode of time (integer or double). It exists
+# *only* so S7 accepts either an integer or double inputs (an S7 base-type
+# class fixes a single base type).
+mt_data <- S7::new_S3_class(
+  "mt_time_data",
+  constructor = function(.data = integer()) {
+    structure(.data, class = "mt_time_data")
+  },
+  validator = function(self) {
+    if (!is.numeric(self)) {
+      cli::cli_abort("{.var self} must be an integer or double vector.", call. = FALSE)
+    }
+  }
+)
+
+granule_len1 <- function(value) {
+  if (length(value@n) != 1L) {
+    "must wrap a single time granule (its `@n` must be length 1)"
+  }
+}
+
+#' @rdname mt_time-class
+#' @usage NULL
+#' @export
+mt_time <- S7::new_class(
+  "mt_time",
+  parent = mt_data,
+  properties = list(
+    chronon = S7::new_property(
+      class = mt_unit,
+      default = quote(mt_unit(1L)),
+      validator = granule_len1
+    )
+  )
+)
+
+#' @rdname mt_time-class
+#' @export
+mt_linear <- S7::new_class("mt_linear", parent = mt_time)
+
+#' @rdname mt_time-class
+#' @export
+mt_duration <- S7::new_class("mt_duration", parent = mt_time)
+
+#' @rdname mt_time-class
+#' @export
+mt_cyclical <- S7::new_class(
+  "mt_cyclical",
+  parent = mt_time,
+  properties = list(
+    cycle = S7::new_property(
+      class = mt_unit,
+      default = quote(mt_unit(1L)),
+      validator = granule_len1
+    )
+  )
 )
 
 #' Base S7 class for mixtime vector objects

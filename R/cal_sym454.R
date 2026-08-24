@@ -83,32 +83,61 @@ S7::method(
 ) <- function(x, cal) "{lin(year(1L))}-{cyc(month(1L), year(1L), label=TRUE, abbreviate=TRUE)}-W{cyc(week(1L), month(1L))}-{cyc(day(1L), week(1L), label=TRUE, abbreviate=TRUE)}"
 
 ## Time labels
-S7::method(linear_labels, cal_sym454$year) <- function(granule, i, ...) {
-  ifelse(i <= 0L, paste0(-i + 1L, "BC"), i)
+# Same "1BC"/"1"/"2"/... era scheme as `cal_gregorian$year` -- reuse its
+# format/parse functions (they only ever touch `granule` generically via
+# chronon_epoch(), so they work unmodified for the sym454 year class too).
+method(linear_labels_format, cal_sym454$year) <- bc_ad_format
+method(linear_labels_parse, cal_sym454$year) <- bc_ad_parse
+method(cyclical_labels, list(cal_sym454$month, cal_sym454$year)) <- label_scheme(
+  start = 1L,
+  width = 2L,
+  vocab = vocab_table(`en-GB` = list(wide = month.name, abbreviated = month.abb))
+)
+# Weeks count with 1-indexing
+method(cyclical_labels, list(cal_sym454$week, cal_sym454$month)) <- label_scheme(start = 1L)
+
+# Candidate parsing formats
+method(chronon_parse_linear, list(cal_sym454$month, class_any)) <- function(x, cal) {
+  parse_format(
+    # e.g. "2024-01", "2024 Jan", "2024, January"
+    "{lin(year)}[-/,\\s]+{cyc(month,year)}",
+    # e.g. "01-2024", "Jan 2024", "January, 2024"
+    "{cyc(month,year)}[-/,\\s]+{lin(year)}",
+    regex = TRUE
+  )
 }
-S7::method(cyclical_labels, list(cal_sym454$month, cal_sym454$year)) <-
-  function(granule, cycle, i, label = FALSE, abbreviate = FALSE, ...) {
-    if (label) {
-      # Index into R's localised month name objects (month.name and month.abb)
-      if (abbreviate) month.abb[i + 1L] else month.name[i + 1L]
-    } else {
-      # Use i + 1L for 1-indexing months (so January is 1, February is 2, ...)
-      sprintf("%02d", i + 1L)
-    }
-  }
-S7::method(cyclical_labels, list(cal_sym454$week, cal_sym454$month)) <-
-  function(granule, cycle, i, ...) {
-    as.character(i + 1L)
-  }
+method(
+  chronon_parse_linear,
+  list(cal_sym454$day, S7::new_S3_class("cal_sym454"))
+) <- function(x, cal) {
+  parse_format(
+    # e.g. "2024-Jan-W2-3", "2024 January w2 3rd"
+    "{lin(year)}[-/,\\s]+{cyc(month,year)}[-/,\\s]+[Ww]?{cyc(week,month)}[-/,\\s]+{cyc(day,week)}(?:st|nd|rd|th)?",
+    # e.g. "3rd-W2-Jan-2024", "3, w2, January 2024"
+    "{cyc(day,week)}(?:st|nd|rd|th)?[-/,\\s]+[Ww]?{cyc(week,month)}[-/,\\s]+{cyc(month,year)}[-/,\\s]+{lin(year)}",
+    regex = TRUE
+  )
+}
+method(chronon_parse_cyclical, list(cal_sym454$month, cal_sym454$year)) <- function(x, y) {
+  # e.g. "1", "Jan", "January"
+  parse_format("{cyc(month,year)}")
+}
+method(chronon_parse_cyclical, list(cal_sym454$week, cal_sym454$month)) <- function(x, y) {
+  parse_format(
+    # e.g. "2", "W2", "w02"
+    "[Ww]?{cyc(week,month)}",
+    regex = TRUE
+  )
+}
 
 # Calendar arithmetic
 ## Epochs
 method(chronon_epoch, cal_sym454$year) <- function(x) 1970L
 
 ## Cardinality
-S7::method(chronon_cardinality, list(cal_sym454$month, cal_sym454$year)) <-
-  function(x, y, at = NULL) {
-    y@n * 12L / x@n
+S7::method(chronon_cardinality_fixed, list(cal_sym454$month, cal_sym454$year)) <-
+  function(x, y) {
+    12L
   }
 S7::method(chronon_cardinality, list(cal_sym454$week, cal_sym454$month)) <-
   function(x, y, at = NULL) {
@@ -267,7 +296,7 @@ S7::method(chronon_divmod, list(cal_sym454$month, cal_sym454$week)) <-
       ifelse(m < 2976L,  30L + leaps_cycle_79(m - 2028L),
                          44L + leaps_cycle_45(m - 2976L)))))
     }
-    x_cyc <- x + 2531L + month_size  # right align multi-month units
+    x_cyc <- x * month_size + 2531L
     n_leaps <- leaps_symmetry454(x_cyc) - 37L # number of leaps after 1970 Jan
     
     # 3. Combine complete cycles, partial cycles, and leap week adjustments 

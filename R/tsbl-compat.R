@@ -11,7 +11,7 @@ method(interval_pull, class_mixtime) <- function(x) {
   )
 }
 
-interval_pull.mt_linear <- function(x) {
+method(interval_pull, mt_time) <- function(x) {
   chronon <- attr(x, "chronon")
 
   interval <- list(chronon@n)
@@ -20,7 +20,7 @@ interval_pull.mt_linear <- function(x) {
   rlang::inject(tsibble::new_interval(!!!interval))
 }
 
-#' @export
+#' @exportS3Method base::format mixtime_interval
 format.mixtime_interval <- function(x, ...) {
   fmt <- vapply(
     vctrs::new_rcrd(unclass(x)),
@@ -50,7 +50,7 @@ fmt_interval <- function (x, ...) {
   paste0(val[val != 0], fmt_names[val != 0], collapse = " ")
 }
 
-#' @export
+#' @exportS3Method base::print mixtime_interval
 print.mixtime_interval <- function(x, ...) cat(format(x, ...))
 
 #' @export

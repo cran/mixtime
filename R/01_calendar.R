@@ -69,7 +69,7 @@ new_calendar <- function(..., inherit = NULL, class = character()) {
   cal
 }
 
-#' @export
+#' @exportS3Method base::print mt_calendar
 print.mt_calendar <- function(x, ...) {
   # Get calendar class (excluding mt_calendar base class)
   cal_classes <- setdiff(class(x), "mt_calendar")
@@ -130,6 +130,5 @@ method(time_calendar, mt_unit) <- function(x) {
 method(time_calendar, class_mixtime) <- function(x) {
   time_calendar(chronon_common(x))
 }
-method(time_calendar, S7::new_S3_class("mt_linear")) <- function(x) time_calendar(time_chronon(x))
-method(time_calendar, S7::new_S3_class("mt_cyclical")) <- function(x) time_calendar(time_chronon(x))
+method(time_calendar, mt_time) <- function(x) time_calendar(time_chronon(x))
 method(time_calendar, S7::class_any) <- function(x) cal_gregorian

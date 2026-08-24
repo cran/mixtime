@@ -6,10 +6,11 @@ knitr::opts_chunk$set(
 
 ## ----setup, message = FALSE---------------------------------------------------
 library(mixtime)
+library(S7)
 
 ## -----------------------------------------------------------------------------
 .onLoad <- function(...) {
-  S7::methods_register()
+  methods_register()
 }
 
 ## ----time-units---------------------------------------------------------------
@@ -36,21 +37,21 @@ cal_symmetry454$month(1L, tz = "UTC")
 ## -----------------------------------------------------------------------------
 chronon_cardinality(cal_isoweek$day(1L), cal_isoweek$week(1L))
 
+## ----cardinality-fixed--------------------------------------------------------
+# Each Symmetry454 year has 12 months
+method(chronon_cardinality_fixed, list(cal_symmetry454$month, cal_symmetry454$year)) <-
+  function(x, y) {
+    12L
+  }
+chronon_cardinality(cal_symmetry454$month(1L), cal_symmetry454$year(1L))
+
 ## -----------------------------------------------------------------------------
 chronon_cardinality(cal_gregorian$day(1L), cal_gregorian$month(1L), at = 0L) # Jan 1970
 chronon_cardinality(cal_gregorian$day(1L), cal_gregorian$month(1L), at = 1L) # Feb 1970
 chronon_cardinality(cal_gregorian$day(1L), cal_gregorian$month(1L), at = 25L) # Feb 1972 (leap year)
 
-## ----cardinality-fixed--------------------------------------------------------
-# Each Symmetry454 year has 12 months
-S7::method(chronon_cardinality, list(cal_symmetry454$month, cal_symmetry454$year)) <-
-  function(x, y, at = NULL) {
-    y@n * 12L / x@n
-  }
-chronon_cardinality(cal_symmetry454$month(1L), cal_symmetry454$year(1L))
-
 ## ----cardinality-variable-----------------------------------------------------
-S7::method(chronon_cardinality, list(cal_symmetry454$week, cal_symmetry454$month)) <-
+method(chronon_cardinality, list(cal_symmetry454$week, cal_symmetry454$month)) <-
   function(x, y, at = NULL) {
     # The number of weeks in each n-month period
     month_size <- y@n
@@ -105,7 +106,7 @@ chronon_cardinality(cal_symmetry454$month(1L), cal_symmetry454$week(2L), at = 0:
 chronon_divmod(cal_gregorian$day(1L), cal_gregorian$month(1L), 45L)
 
 ## ----divmod-------------------------------------------------------------------
-S7::method(chronon_divmod, list(cal_symmetry454$week, cal_symmetry454$month)) <-
+method(chronon_divmod, list(cal_symmetry454$week, cal_symmetry454$month)) <-
   function(from, to, x) {
     # Most of this code works on 1-week granules
     week_size <- from@n
@@ -207,13 +208,13 @@ with(cal_symmetry454, chronon_divmod(week(2L), month(1L), 4L))
 with(cal_symmetry454, chronon_divmod(day(1L), year(1L), 839L))
 
 ## -----------------------------------------------------------------------------
-S7::method(chronon_epoch, cal_symmetry454$year) <- function(x) 1970L
+method(chronon_epoch, cal_symmetry454$year) <- function(x) 1970L
 
 ## -----------------------------------------------------------------------------
-S7::method(time_unit_full, cal_symmetry454$year)  <- function(x) "Symmetry454 year{?/s}"
-S7::method(time_unit_abbr, cal_symmetry454$year)  <- function(x) "Y"
-S7::method(time_unit_full, cal_symmetry454$month) <- function(x) "Symmetry454 month{?/s}"
-S7::method(time_unit_abbr, cal_symmetry454$month) <- function(x) "M"
+method(time_unit_full, cal_symmetry454$year)  <- function(x) "Symmetry454 year{?/s}"
+method(time_unit_abbr, cal_symmetry454$year)  <- function(x) "Y"
+method(time_unit_full, cal_symmetry454$month) <- function(x) "Symmetry454 month{?/s}"
+method(time_unit_abbr, cal_symmetry454$month) <- function(x) "M"
 
 ## -----------------------------------------------------------------------------
 linear_time(as.Date("1955-11-12"), chronon = cal_symmetry454$year(1L))
@@ -229,8 +230,18 @@ cyclical_time(as.Date("1955-11-12"), chronon = week(1L), cycle = month(1L), cale
 month_of_year(as.Date("1955-11-12"), calendar = cal_symmetry454)
 
 ## -----------------------------------------------------------------------------
-S7::method(linear_labels, cal_symmetry454$year) <- function(granule, i, ...) {
+method(linear_labels_format, cal_symmetry454$year) <- function(granule, i, ...) {
   ifelse(i <= 0L, paste0(-i + 1L, "BC"), i)
+}
+method(linear_labels_parse, cal_symmetry454$year) <- function(granule, ...) {
+  list(
+    pattern = "\\d+(?:BC)?",
+    decode = function(text, at = NULL) {
+      bc <- grepl("BC$", text)
+      n <- as.integer(sub("BC$", "", text))
+      ifelse(bc, 1L - n, n) - chronon_epoch(granule)
+    }
+  )
 }
 
 ## -----------------------------------------------------------------------------
@@ -238,22 +249,18 @@ year(-1:2, calendar = cal_symmetry454)
 
 ## -----------------------------------------------------------------------------
 # Labels for months of the year, essentially the same as Gregorian months in years.
-S7::method(cyclical_labels, list(cal_symmetry454$month, cal_symmetry454$year)) <-
-  function(granule, cycle, i, label = FALSE, abbreviate = FALSE, ...) {
-    if (label) {
-      # Index into R's localised month name objects (month.name and month.abb)
-      if (abbreviate) month.abb[i + 1L] else month.name[i + 1L]
-    } else {
-      # Use i + 1L for 1-indexing months (so January is 1, February is 2, ...)
-      sprintf("%02d", i + 1L)
-    }
-  }
+method(cyclical_labels, list(cal_symmetry454$month, cal_symmetry454$year)) <-
+  label_scheme(
+    start = 1L,
+    width = 2L,
+    vocab = vocab_table(
+      `en-GB` = list(wide = month.name, abbreviated = month.abb)
+    )
+  )
 
-# Labels for weeks of the month are simply 1-indexed (e.g. "W1", "W2", ...)
-S7::method(cyclical_labels, list(cal_symmetry454$week, cal_symmetry454$month)) <-
-  function(granule, cycle, i, ...) {
-    as.character(i + 1L)
-  }
+# Labels for weeks of the month are simply 1-indexed (e.g. "1", "2", ...)
+method(cyclical_labels, list(cal_symmetry454$week, cal_symmetry454$month)) <-
+  label_scheme(start = 1L)
 
 ## -----------------------------------------------------------------------------
 # Month of year
@@ -273,25 +280,25 @@ yearmonth(as.Date("1955-11-12"), calendar = cal_symmetry454)
 
 ## -----------------------------------------------------------------------------
 # Simply display years as numbers (e.g. "1970", "1971", ...)
-S7::method(
+method(
   chronon_format_linear,
   list(cal_symmetry454$year, S7::class_any)
 ) <- function(x, cal) "{lin(year(1L))}"
 
 # Display labelled months as month within year (e.g. "1970 Jan", "1970 Feb", ...)
-S7::method(
+method(
   chronon_format_linear,
   list(cal_symmetry454$month, S7::class_any)
 ) <- function(x, cal) "{lin(year(1L))}-{cyc(month(1L), year(1L), label=TRUE, abbreviate=TRUE)}"
 
 # Display weeks as week in month in year (e.g. "1970-01-W1", "1970-01-W2", ...)
-S7::method(
+method(
   chronon_format_linear,
   list(cal_symmetry454$week, S7::new_S3_class("cal_symmetry454"))
 ) <- function(x, cal) "{lin(year(1L))}-{cyc(month(1L), year(1L), label=TRUE, abbreviate=TRUE)}-W{cyc(week(1L), month(1L))}"
 
 # Format days as day in week in month in year (e.g. "1970-Jan-W1-Mon", "1970-Jan-W1-Tue", ...)
-S7::method(
+method(
   chronon_format_linear,
   list(cal_symmetry454$day, S7::new_S3_class("cal_symmetry454"))
 ) <- function(x, cal) "{lin(year(1L))}-{cyc(month(1L), year(1L), label=TRUE, abbreviate=TRUE)}-W{cyc(week(1L), month(1L))}-{cyc(day(1L), week(1L), label=TRUE, abbreviate=TRUE)}"
@@ -311,7 +318,7 @@ linear_time(as.Date(c("1985-10-26", "1955-11-05", "1955-11-12")), chronon = cal_
 
 ## -----------------------------------------------------------------------------
 # Format months in years as abbreviated month labels (e.g. "Jan", "Feb", ...)
-S7::method(
+method(
   chronon_format_cyclical,
   list(cal_symmetry454$month, cal_symmetry454$year)
 ) <- function(x, y) "{cyc(month,year,label=TRUE,abbreviate=TRUE)}"
@@ -322,4 +329,15 @@ month_of_year(as.Date("1955-11-12"), calendar = cal_symmetry454)
 ## -----------------------------------------------------------------------------
 duration(1L, cal_symmetry454$year(1L))
 duration(3L, cal_symmetry454$month(1L))
+
+## -----------------------------------------------------------------------------
+method(chronon_parse_linear, list(cal_symmetry454$month, S7::class_any)) <- function(x, cal) {
+  parse_format(
+    "{lin(year(1L))}-{cyc(month(1L), year(1L), label=TRUE, abbreviate=TRUE)}",
+    "{lin(year(1L))}-{cyc(month(1L), year(1L))}"
+  )
+}
+
+## -----------------------------------------------------------------------------
+time_parse(c("1970-Jan", "1970-03"), format = chronon_parse_linear(cal_symmetry454$month(1L)))
 

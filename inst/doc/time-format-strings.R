@@ -28,7 +28,7 @@ format(
 
 ## -----------------------------------------------------------------------------
 fmt_date  <- "{lin(year)}-{cyc(month, year)}-{cyc(day, month)}"
-fmt_lunar <- "{with(cal_time_lunar, cyc(phase, month, emoji = TRUE))}"
+fmt_lunar <- "{with(cal_time_lunar, cyc(phase, month, label = TRUE, type = \"emoji\"))}"
 format(date(Sys.Date()), format = paste(fmt_date, fmt_lunar))
 
 ## -----------------------------------------------------------------------------

@@ -17,7 +17,7 @@ tz_name <- S7::new_generic("tz_name", "x")
 S7::method(tz_name, class_mixtime) <- function(x) {
   as.character(vecvec::vecvec_apply(x, tz_name))
 }
-S7::method(tz_name, S7::new_S3_class("mt_time")) <- function(x) {
+S7::method(tz_name, mt_time) <- function(x) {
   rep_len(tz_name(attr(x, "chronon")), length(x))
 }
 S7::method(tz_name, mt_tz_unit) <- function(x) x@tz
@@ -35,7 +35,8 @@ S7::method(tz_name, S7::class_any) <- function(x) {
 #' @param x A time class coercible to POSIXt with an associated time zone.
 #' @param ... Additional arguments passed to methods.
 #'
-#' @return A numeric vector of offsets from UTC in the same chronon (e.g. seconds for POSIXt, days for dates, etc.)
+#' @return A `mixtime` duration vector of offsets from UTC in the same chronon
+#'   (e.g. seconds for POSIXt, days for dates, etc.)
 #' @export
 #'
 #' @examples
@@ -47,19 +48,25 @@ S7::method(tz_offset, S7::class_POSIXt) <- function(
   tz = tz_name(time_chronon(x)),
   ...
 ) {
-  get_tz_offset(x, tz)
+  duration(
+    get_tz_offset(x, tz),
+    chronon = cal_gregorian$second(1L, tz = tz[1L])
+  )
 }
-S7::method(tz_offset, S7::class_Date) <- function(x, ...) rep.int(0, length(x))
+S7::method(tz_offset, S7::class_Date) <- function(x, ...) {
+  duration(rep.int(0, length(x)), chronon = cal_gregorian$day(1L))
+}
 method(tz_offset, class_mixtime) <- vecvec::vecvec_apply_fn(
   tz_offset,
-  numeric()
+  SIMPLIFY = TRUE
 )
-method(tz_offset, S7::new_S3_class("mt_time")) <- function(
+method(tz_offset, mt_time) <- function(
   x,
   tz = tz_name(attr(x, "chronon")),
   ...
 ) {
-  tz_offset_impl(as.numeric(x), attr(x, "chronon"), tz)
+  chronon <- attr(x, "chronon")
+  duration(tz_offset_impl(as.numeric(x), chronon, tz), chronon = chronon)
 }
 
 tz_offset_impl <- function(x, chronon, tz = tz_name(chronon)) {
@@ -84,6 +91,64 @@ tz_offset_impl <- function(x, chronon, tz = tz_name(chronon)) {
       time_s[nz_offset]
     )
   offset_s
+}
+
+# Shift a `chronon`-native numeric value from UTC into the local wall-clock
+# domain of `tz`, expressed as if it were UTC. `chronon_divmod()`,
+# `chronon_decompose()`/`chronon_recompose()`, and `chronon_convert_impl()`
+# (when called with `tz = "UTC"`) are all tz-blind and work in this shifted
+# domain - see `time_round_impl()` and `seq.mixtime::mt_time()`.
+tz_to_local <- function(x, chronon, tz) {
+  x + tz_offset_impl(x, chronon, tz = tz)
+}
+
+# Undo `tz_to_local()`, recovering the true (UTC) `chronon` value. A second
+# pass re-evaluates the offset at the candidate raw instant rather than
+# reusing the forward offset, since a value that falls in a DST gap/overlap
+# can have a different offset there than at its own local-shifted value.
+#
+# TODO(perf): this approximates gap/overlap resolution with two
+# `tz_offset_impl()` round trips (each its own `chronon_convert_impl()` +
+# `get_tz_offset()` C call). The vendored `date`/`tzdb` library already has a
+# purpose-built, single-lookup primitive for exactly this -
+# `date::time_zone::to_sys(local_time, choose::earliest|latest)` (see
+# tzdb's `include/date/tz.h`) - which is what `as.POSIXct()` itself relies on.
+# Wiring up a new cpp11-registered resolver around that would both halve the
+# lookup cost and replace this two-sample approximation with the library's
+# real resolution logic, at the cost of touching `src/` (new registered
+# function, regenerated `src/cpp11.cpp`/`R/cpp11.R` bindings, recompile).
+# Left as pure R for now since the 2x cost is negligible at realistic
+# `seq()`/`time_round()` sizes.
+tz_to_utc <- function(x, chronon, tz, discrete = FALSE, boundary = TRUE) {
+  tzo <- tz_offset_impl(
+    x - tz_offset_impl(x, chronon, tz = tz),
+    chronon,
+    tz = tz
+  )
+
+  if (discrete) {
+    if (boundary) {
+      # A boundary conversion (`chronon_convert_impl()`'s multi-hop path) has
+      # already resolved which `chronon` bucket the local-shifted value falls
+      # into via a real divmod - the offset is spent, so only a leftover
+      # *whole*-unit remainder (never seen with real-world offsets, but kept
+      # for safety) still needs correcting; floor(x) - trunc(tzo) keeps that
+      # correction separate from the local-bucket alignment so a fractional
+      # offset can't borrow across a unit boundary and land a whole unit off.
+      nudge <- 8 * .Machine$double.eps * pmax(abs(x), 1)
+      as.integer(floor(x + nudge) - trunc(tzo))
+    } else {
+      # No divmod happened between the matching tz_to_local() shift and this
+      # call (e.g. a same-chronon or pure-ratio conversion), so the offset is
+      # still fully outstanding in `x` and must be subtracted whole, before
+      # flooring - not floored away first and only partly corrected after.
+      shifted <- x - tzo
+      nudge <- 8 * .Machine$double.eps * pmax(abs(shifted), 1)
+      as.integer(floor(shifted + nudge))
+    }
+  } else {
+    x - tzo
+  }
 }
 
 #' Get timezone abbreviation
@@ -129,8 +194,11 @@ tz_abbreviation <- function(x, tz = tz_name(x)) {
 #' @param end A POSIXct datetime object or something coercible to POSIXct,
 #'   representing the end of the time range.
 #'
-#' @return A data frame containing information about timezone transitions
-#'   in the specified range.
+#' @return A data frame with columns:
+#'   * `time`: A `mixtime` linear time point (continuous, UTC seconds) giving
+#'     the instant of the transition.
+#'   * `offset_before`, `offset_after`: `mixtime` durations (UTC seconds)
+#'     giving the UTC offset immediately before and after the transition.
 #'
 #' @examples
 #' # Get all DST transitions in 2024 for New York
@@ -141,8 +209,26 @@ tz_abbreviation <- function(x, tz = tz_name(x)) {
 #'
 #' @export
 tz_transitions <- function(start, end) {
-  start <- as.double(as.POSIXct(start))
-  end <- as.double(as.POSIXct(end))
+  start <- as.POSIXct(start)
   tz <- attr(start, "tzone") %||% Sys.timezone()
-  get_tz_transitions(start, end, tz)
+  end <- as.double(as.POSIXct(end))
+  start <- as.double(start)
+
+  transitions <- get_tz_transitions(start, end, tz)
+
+  transitions$time <- linear_time(
+    transitions$time,
+    chronon = cal_gregorian$second(1L, tz = "UTC"),
+    discrete = FALSE
+  )
+  transitions$offset_before <- duration(
+    transitions$offset_before,
+    chronon = cal_gregorian$second(1L, tz = "UTC")
+  )
+  transitions$offset_after <- duration(
+    transitions$offset_after,
+    chronon = cal_gregorian$second(1L, tz = "UTC")
+  )
+
+  transitions
 }

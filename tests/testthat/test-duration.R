@@ -81,3 +81,111 @@ test_that("vector of fractional durations formats correctly", {
     c("1.0 minutes", "1.1 minutes", "NA")
   )
 })
+
+# ---------------------------------------------------------------------------
+# Converting between duration chronons
+# ---------------------------------------------------------------------------
+
+test_that("converting a duration to a coarser chronon is continuous by default for doubles", {
+  expect_equal(as.numeric(duration(days(4.0), cal_isoweek$week(1L))), 4/7)
+})
+
+test_that("converting a duration to a coarser chronon is discrete by default for integers", {
+  expect_identical(as.integer(duration(days(4L), cal_isoweek$week(1L))), 0L)
+})
+
+test_that("discrete = FALSE returns a fractional duration", {
+  expect_equal(as.numeric(duration(days(4L), cal_isoweek$week(1L), discrete = FALSE)), 4/7)
+})
+
+test_that("discrete = TRUE truncates to whole units", {
+  expect_identical(as.integer(duration(days(4), cal_isoweek$week(1L), discrete = TRUE)), 0L)
+  expect_identical(as.integer(duration(days(10), cal_isoweek$week(1L), discrete = TRUE)), 1L)
+})
+
+test_that("converting a duration to a finer chronon multiplies the magnitude", {
+  expect_equal(as.numeric(duration(weeks(2L), cal_gregorian$day(1L))), 14)
+})
+
+test_that("Comparison - same chronon compares magnitudes directly", {
+  expect_true(days(3L) == days(3L))
+  expect_true(days(3L) < days(5L))
+  expect_false(days(3L) > days(5L))
+  expect_true(days(3L) != days(5L))
+  expect_equal(days(1:3) < days(2L), c(TRUE, FALSE, FALSE))
+})
+
+test_that("Comparison - different chronons compare in a common chronon", {
+  expect_true(weeks(1L) == days(7L))
+  expect_true(weeks(1L) > days(6L))
+  expect_true(days(8L) > weeks(1L))
+  expect_false(weeks(1L) < days(7L))
+  expect_true(weeks(1L) <= days(7L))
+})
+
+test_that("Comparison - a bare number is a duration in the other chronon", {
+  expect_true(days(3L) == 3)
+  expect_true(3 == days(3L))
+  expect_true(days(3L) < 5)
+})
+
+# ---------------------------------------------------------------------------
+# Converting a bare duration granule (pulled out of a mixtime's `@x`)
+# ---------------------------------------------------------------------------
+
+test_that("converting a bare duration granule agrees with converting its mixtime", {
+  d <- days(1:3)
+  expect_equal(
+    duration(d@x[[1L]], chronon = cal_gregorian$hour(1L), discrete = FALSE),
+    duration(d, chronon = cal_gregorian$hour(1L), discrete = FALSE)
+  )
+  expect_equal(
+    as.numeric(duration(d@x[[1L]], chronon = cal_gregorian$hour(1L), discrete = FALSE)),
+    c(24, 48, 72)
+  )
+})
+
+test_that("converting a bare duration granule round-trips through another chronon", {
+  d <- days(1:3)
+  back <- duration(
+    duration(d@x[[1L]], chronon = cal_gregorian$hour(1L), discrete = FALSE)@x[[1L]],
+    chronon = cal_gregorian$day(1L), discrete = FALSE
+  )
+  expect_equal(as.numeric(back), as.numeric(d))
+})
+
+test_that("discrete = FALSE on a bare duration granule yields a double", {
+  g <- days(1:3)@x[[1L]]
+  res <- duration(g, chronon = cal_gregorian$hour(1L), discrete = FALSE)
+  expect_false(is.integer(vctrs::vec_data(res@x[[1L]])))
+})
+
+test_that("duration() refuses a non-duration time granule", {
+  tp <- mixtime(as.Date("2023-01-01") + 0:2)
+  expect_error(
+    duration(tp@x[[1L]], chronon = cal_gregorian$hour(1L)),
+    "isn't a duration"
+  )
+})
+
+test_that("calendar-dependent duration conversion errors with a duration-specific message", {
+  expect_error(
+    duration(days(60), chronon = cal_gregorian$month(1L), discrete = FALSE),
+    "no anchor"
+  )
+})
+
+test_that("zero-length durations can be built and converted", {
+  # The element-wise duration predicate is `NA` for a zero-length input, so
+  # zero-length magnitudes must be routed by class rather than by value.
+  expect_length(seconds(integer()), 0L)
+  expect_length(duration(numeric(), chronon = cal_gregorian$day(1L)), 0L)
+
+  empty <- duration(
+    seconds(integer())@x[[1L]],
+    chronon = cal_gregorian$hour(1L),
+    discrete = FALSE
+  )
+  expect_length(empty, 0L)
+  expect_equal(time_unit_plural(attr(empty@x[[1L]], "chronon")), "hours")
+})

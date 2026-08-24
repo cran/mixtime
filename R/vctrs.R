@@ -30,198 +30,191 @@ vec_cast_to_mixtime <- function(x, to, ...) {
 
 #' @importFrom vctrs vec_proxy_order
 method(vec_proxy_order, class_mixtime) <- function(x, ...) {
-  if (length(x@x) > 1L) {
-    # Convert all time values to a common chronon
-    chronons <- lapply(x@x, function(v) attr(v, "chronon"))
-    chronon_type <- chronon_common_impl(chronons)
+  mode <- check_common_time_mode(x)
+  if (!length(x@x)) return(vec_proxy_order(vecvec::unvecvec(x)))
 
+  # The granules each part is reduced to, read before converting the parts below
+  # replaces them with bare chronon counts carrying neither granule.
+  chronon <- chronon_common_impl(lapply(x@x, function(v) attr(v, "chronon")))
+  cycle <- if (identical(mode, "cyclical")) check_common_cycle(x)
+
+  # Convert all time values to a common chronon, which a single part already is
+  if (length(x@x) > 1L) {
     x@x <- lapply(x@x, function(v) {
       if (is.integer(v)) v <- v + 0.5
-      chronon_convert(v, chronon_type)
+      chronon_convert(v, chronon)
     })
   }
+
+  if (!is.null(cycle)) {
+    # Cyclical values order by their position within the cycle, matching `==`
+    # and `<` on `mt_cyclical` (see `mt_cyclical-compare`) rather than the
+    # absolute chronon count stored underneath.
+    x@x <- lapply(x@x, function(v) cyclical_position(vec_data(v), chronon, cycle))
+  }
+
   vec_proxy_order(vecvec::unvecvec(x))
 }
 
 #' @importFrom vctrs vec_proxy_equal
 method(vec_proxy_equal, class_mixtime) <- function(x, ...) {
+  cycle <- if (identical(check_common_time_mode(x), "cyclical")) check_common_cycle(x)
   data_frame(
-    x = as.numeric(x),
+    # Cyclical values are equal when they share a position within the cycle,
+    # matching `==` on `mt_cyclical` (see `mt_cyclical-compare`) rather than the
+    # absolute chronon count stored underneath.
+    x = if (is.null(cycle)) {
+      as.numeric(x)
+    } else {
+      unvecvec(vecvec_apply(x, function(x) {
+        cyclical_position(vec_data(x), attr(x, "chronon"), cycle)
+      }))
+    },
     g = unvecvec(vecvec_apply(x, function(x) rep(rlang::hash(attr(x, "chronon")), length(x))))
   )
 }
 
-# ----------------------------------------------------------------
-# mt_linear methods
-# ----------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# vec_cast / vec_ptype2 methods for fundamental modes of time
+# ------------------------------------------------------------------------------
 
-#' @method vec_cast.character mt_linear
-#' @export
-vec_cast.character.mt_linear <- function(x, to, ...) {
-  time_format_impl(x)
+# --- casts from a time vector to a base type ---
+mt_cast_to_character <- function(x, to, ...) time_format_impl(x)
+mt_cast_to_integer <- function(x, to, ...) vec_cast(vec_data(x), integer())
+mt_cast_to_double <- function(x, to, ...) vec_cast(vec_data(x), double())
+mt_cast_to_Date <- function(x, to, ...) {
+  # Convert to naive time zone dates
+  vec_restore(chronon_convert(x, cal_gregorian$day(1L, tz = NA_character_)), to)
+}
+mt_cast_to_POSIXct <- function(x, to, ...) {
+  vec_restore(chronon_convert(x, cal_gregorian$second(1L, tz = "UTC"), discrete = FALSE), to)
 }
 
-#' @method vec_cast.integer mt_linear
-#' @export
-vec_cast.integer.mt_linear <- function(x, to, ...) {
-  vec_cast(vec_data(x), integer())
-}
-
-#' @method vec_cast.double mt_linear
-#' @export
-vec_cast.double.mt_linear <- function(x, to, ...) {
-  vec_cast(vec_data(x), double())
-}
-
-#' @export
-vec_cast.mt_linear.integer <- function(x, to, ...) {
+# --- casts from a base type to a time vector ---
+mt_cast_from_numeric <- function(x, to, ...) {
   attributes(x) <- attributes(to)
   x
 }
 
-#' @export
-vec_cast.mt_linear.double <- function(x, to, ...) {
-  attributes(x) <- attributes(to)
+mt_cast_from_character <- function(x, to, ...) {
+  cycle <- if (S7_inherits(to, mt_cyclical)) attr(to, "cycle") else NULL
+  data <- vec_data(time_parse_impl(
+    x,
+    chronon = attr(to, "chronon"),
+    cycle = cycle,
+    discrete = is.integer(vec_data(to))
+  ))
+  attributes(data) <- attributes(to)
+  data
+}
+
+# A cyclical `cycle` is a *modulus*, not a unit of measure: it names the
+# equivalence relation the stored (absolute) chronon count is reduced by at
+# format and comparison time. Unlike a chronon - where the finest common granule
+# represents both operands losslessly - any granule common to two different
+# cycles has *fewer* distinct positions than either operand, so
+# `chronon_common_impl()` is not the applicable operation (week + year would give
+# a one-day cycle, collapsing every value to the same position). Two cyclical
+# vectors therefore combine only when they share a cycle, once naive properties
+# (tz / location) have been reconciled between them.
+cycle_common <- function(x, y) {
+  x <- granule_inherit_props(x, y)
+  y <- granule_inherit_props(y, x)
+  if (!identical(x, y)) return(NULL)
   x
 }
 
-#' @export
-vec_ptype2.mt_linear.mt_linear <- function(x, y, ..., x_arg, y_arg) {
-  new_time(
-    vec_ptype2(vec_data(x), vec_data(y)),
-    chronon = chronon_common_impl(
-      list(attr(x, "chronon"), attr(y, "chronon"))
-    ),
-    class = "mt_linear"
-  )
-}
+cycle_incompatible_details <- paste0(
+  "Cyclical time vectors can only be combined when they share a cycle.\n",
+  "Differing cycles can be held side by side in a `mixtime()` vector instead."
+)
 
-#' @export
-vec_cast.mt_linear.mt_linear <- function(x, to, ..., x_arg, to_arg) {
+# --- time-to-time cast (same kind) ---
+mt_cast_time_time <- function(x, to, ..., x_arg = "", to_arg = "") {
+  if (S7_inherits(to, mt_duration)) {
+    discrete <- is.integer(vec_data(to))
+    x <- as.numeric(x) * chronon_cardinality(attr(to, "chronon"), attr(x, "chronon"))
+    if (discrete) x <- as.integer(x)
+    attributes(x) <- attributes(to)
+    return(x)
+  }
+  if (S7_inherits(to, mt_cyclical) &&
+      is.null(cycle_common(attr(x, "cycle"), attr(to, "cycle")))) {
+    vctrs::stop_incompatible_cast(
+      x, to, x_arg = x_arg, to_arg = to_arg,
+      details = cycle_incompatible_details
+    )
+  }
   x <- chronon_convert(x, attr(to, "chronon"), discrete = is.integer(to))
   attributes(x) <- attributes(to)
   x
 }
 
-#' @method vec_restore mt_linear
-#' @export
-vec_restore.mt_linear <- function(x, to, ..., x_arg, to_arg) {
-  if (!is.numeric(x)) {
-    cli::cli_abort("{.var x} must be a numeric vector.", call. = FALSE)
+# --- prototype2 between two time vectors of the same kind ---
+mt_ptype2_time_time <- function(x, y, ..., x_arg = "", y_arg = "") {
+  x_dur <- S7_inherits(x, mt_duration)
+  y_dur <- S7_inherits(y, mt_duration)
+  x_cyc <- S7_inherits(x, mt_cyclical)
+  y_cyc <- S7_inherits(y, mt_cyclical)
+  if (x_dur != y_dur || x_cyc != y_cyc) {
+    vctrs::stop_incompatible_type(x, y, x_arg = x_arg, y_arg = y_arg)
   }
-  attributes(x) <- attributes(to)
-  x
-}
-
-# ----------------------------------------------------------------
-# mt_duration methods
-# ----------------------------------------------------------------
-
-#' @method vec_cast.character mt_duration
-#' @export
-vec_cast.character.mt_duration <- function(x, to, ...) {
-  format(x)
-}
-
-#' @export
-vec_cast.mt_duration.integer <- vec_cast.mt_linear.integer
-
-#' @export
-vec_cast.mt_duration.mt_duration <- function(x, to, ..., x_arg, to_arg) {
-  discrete <- is.integer(vec_data(to))
-  x <- as.numeric(x) * chronon_cardinality(attr(to, "chronon"), attr(x, "chronon"))
-  if (discrete) x <- as.integer(x)
-  attributes(x) <- attributes(to)
-  x
-}
-
-#' @export
-vec_ptype2.mt_duration.mt_duration <- function(x, y, ..., x_arg, y_arg) {
-  new_time(
-    vec_ptype2(vec_data(x), vec_data(y)),
-    chronon = chronon_common_impl(list(attr(x, "chronon"), attr(y, "chronon"))),
-    class = "mt_duration"
-  )
-}
-
-#' @export
-vec_ptype2.mt_duration.double <- function(x, y, ..., x_arg, y_arg) x
-
-#' @export
-vec_ptype2.double.mt_duration <- function(x, y, ..., x_arg, y_arg) y
-
-#' @export
-vec_cast.mt_duration.double <- function(x, to, ..., x_arg, to_arg) {
-  attributes(x) <- attributes(to)
-  x
-}
-
-#' @export
-vec_ptype2.mt_duration.integer <- function(x, y, ..., x_arg, y_arg) x
-
-#' @export
-vec_ptype2.integer.mt_duration <- function(x, y, ..., x_arg, y_arg) y
-
-#' @method vec_restore mt_duration
-#' @export
-vec_restore.mt_duration <- vec_restore.mt_linear
-
-# ----------------------------------------------------------------
-# mt_cyclical methods
-# ----------------------------------------------------------------
-
-#' @method vec_cast.character mt_cyclical
-#' @export
-vec_cast.character.mt_cyclical <- function(x, to, ...) {
-  time_format_impl(x)
-}
-
-#' @method vec_cast.integer mt_cyclical
-#' @export
-vec_cast.integer.mt_cyclical <- function(x, to, ...) {
-  vec_cast(vec_data(x), integer())
-}
-
-#' @method vec_cast.double mt_cyclical
-#' @export
-vec_cast.double.mt_cyclical <- function(x, to, ...) {
-  vec_cast(vec_data(x), double())
-}
-
-#' @export
-vec_cast.mt_cyclical.integer <- function(x, to, ...) {
-  attributes(x) <- attributes(to)
-  x
-}
-
-#' @export
-vec_cast.mt_cyclical.double <- function(x, to, ...) {
-  attributes(x) <- attributes(to)
-  x
-}
-
-#' @export
-vec_ptype2.mt_cyclical.mt_cyclical <- function(x, y, ..., x_arg, y_arg) {
-  new_time(
-    chronon = chronon_common_impl(list(attr(x, "chronon"), attr(y, "chronon"))),
-    cycle = chronon_common_impl(list(attr(x, "cycle"), attr(y, "cycle"))),
-    class = "mt_cyclical"
-  )
-}
-
-#' @export
-vec_cast.mt_cyclical.mt_cyclical <- function(x, to, ..., x_arg, to_arg) {
-  x <- chronon_convert(x, attr(to, "chronon"), discrete = is.integer(to))
-  attributes(x) <- attributes(to)
-  x
-}
-
-#' @method vec_restore mt_cyclical
-#' @export
-vec_restore.mt_cyclical <- function(x, to, ..., x_arg, to_arg) {
-  if (!is.numeric(x)) {
-    cli::cli_abort("{.var x} must be a numeric vector.", call. = FALSE)
+  if (x_cyc) {
+    # The chronon resolves to the finest common granule as usual, but the cycle
+    # must match on both sides - see `cycle_common()`.
+    cycle <- cycle_common(attr(x, "cycle"), attr(y, "cycle"))
+    if (is.null(cycle)) {
+      vctrs::stop_incompatible_type(
+        x, y, x_arg = x_arg, y_arg = y_arg,
+        details = cycle_incompatible_details
+      )
+    }
+    return(mt_cyclical(
+      chronon = chronon_common_impl(list(attr(x, "chronon"), attr(y, "chronon"))),
+      cycle = cycle
+    ))
   }
-  attributes(x) <- attributes(to)
-  x
+  data <- vec_ptype2(vec_data(x), vec_data(y))
+  chronon <- chronon_common_impl(list(attr(x, "chronon"), attr(y, "chronon")))
+  if (x_dur) {
+    mt_duration(data, chronon = chronon)
+  } else {
+    mt_linear(data, chronon = chronon)
+  }
+}
+
+# --- duration <-> numeric prototypes (only durations combine with bare numbers) ---
+mt_ptype2_duration_x <- function(x, y, ...) x
+mt_ptype2_y_duration <- function(x, y, ...) y
+
+# Register the `vec_cast`/`vec_ptype2` methods above on the package-namespaced time
+# classes. Called from `.onLoad()`.
+register_mt_vctrs <- function() {
+  types <- c("mixtime::mt_linear", "mixtime::mt_cyclical", "mixtime::mt_duration")
+  for (cls in types) {
+    # time -> base type
+    register_s3_method("vctrs", "vec_cast.character", cls, mt_cast_to_character)
+    register_s3_method("vctrs", "vec_cast.integer", cls, mt_cast_to_integer)
+    register_s3_method("vctrs", "vec_cast.double", cls, mt_cast_to_double)
+    # base type -> time
+    register_s3_method("vctrs", "vec_cast", paste0(cls, ".integer"), mt_cast_from_numeric)
+    register_s3_method("vctrs", "vec_cast", paste0(cls, ".double"), mt_cast_from_numeric)
+    # time -> time (same kind) and prototype2 (same kind)
+    register_s3_method("vctrs", "vec_cast", paste0(cls, ".", cls), mt_cast_time_time)
+    register_s3_method("vctrs", "vec_ptype2", paste0(cls, ".", cls), mt_ptype2_time_time)
+  }
+
+  # A linear time vector can be cast to Date / POSIXct.
+  register_s3_method("vctrs", "vec_cast.Date", "mixtime::mt_linear", mt_cast_to_Date)
+  register_s3_method("vctrs", "vec_cast.POSIXct", "mixtime::mt_linear", mt_cast_to_POSIXct)
+
+  register_s3_method("vctrs", "vec_cast", "mixtime::mt_linear.character", mt_cast_from_character)
+  register_s3_method("vctrs", "vec_cast", "mixtime::mt_cyclical.character", mt_cast_from_character)
+
+  # Durations combine with bare numbers.
+  dur <- "mixtime::mt_duration"
+  register_s3_method("vctrs", "vec_ptype2", paste0(dur, ".double"), mt_ptype2_duration_x)
+  register_s3_method("vctrs", "vec_ptype2", paste0("double.", dur), mt_ptype2_y_duration)
+  register_s3_method("vctrs", "vec_ptype2", paste0(dur, ".integer"), mt_ptype2_duration_x)
+  register_s3_method("vctrs", "vec_ptype2", paste0("integer.", dur), mt_ptype2_y_duration)
 }

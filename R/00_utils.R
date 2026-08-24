@@ -1,9 +1,24 @@
+# tzdb::tzdb_names() re-derives its result on every call; the timezone
+# database only changes via an explicit tzdb::tzdb_initialize() (done once,
+# in .onLoad()), so the name list is cached lazily on first use.
+tzdb_names_cached <- local({
+  names <- NULL
+  function() {
+    if (is.null(names)) {
+      names <<- tzdb::tzdb_names()
+    }
+    names
+  }
+})
+
 check_tz_name <- function(zone) {
   # Naive time zone
-  if (is.na(zone)) return(invisible(TRUE))
-  
+  if (is.na(zone)) {
+    return(invisible(TRUE))
+  }
+
   # Specified time zone
-  if (!zone %in% tzdb::tzdb_names()) {
+  if (!zone %in% tzdb_names_cached()) {
     cli::cli_abort(
       c(
         "Timezone {.val {zone}} not found in timezone database.",
@@ -15,6 +30,61 @@ check_tz_name <- function(zone) {
   invisible(TRUE)
 }
 
+time_mode_label <- function(x) {
+  if (S7_inherits(x, mt_cyclical)) {
+    "cyclical"
+  } else if (S7_inherits(x, mt_duration)) {
+    "duration"
+  } else {
+    "linear"
+  }
+}
+
+# Operations that reduce a mixtime to mutually comparable values - comparison,
+# ordering, de-duplication - are only meaningful when every element shares one
+# mode of time: an absolute position (`mt_linear`), a position within a cycle
+# (`mt_cyclical`) and a magnitude (`mt_duration`) cannot be compared with one
+# another.
+#
+# Returns the shared mode, or `character(0)` for an empty mixtime.
+check_common_time_mode <- function(x) {
+  modes <- unique(vapply(x@x, time_mode_label, character(1L)))
+  if (length(modes) > 1L) {
+    cli::cli_abort(
+      c(
+        "Can't compare {.field {modes}} time in a single {.cls mixtime} vector.",
+        "i" = "Comparing, sorting and de-duplicating a {.cls mixtime} requires every element to share one mode of time."
+      ),
+      call = NULL
+    )
+  }
+  modes
+}
+
+# Cyclical time compares on its position within a cycle, so those positions are
+# comparable only when every element shares one cycle. A cycle is a modulus
+# rather than a unit of measure, so unlike a chronon there is no common value
+# two differing cycles could be reconciled to (see `cycle_common()`).
+#
+# Returns the shared cycle granule.
+check_common_cycle <- function(x) {
+  cycles <- lapply(x@x, function(x) attr(x, "cycle"))
+  cycle <- Reduce(
+    function(x, y) if (is.null(x)) NULL else cycle_common(x, y),
+    cycles
+  )
+  if (is.null(cycle)) {
+    cli::cli_abort(
+      c(
+        "Can't compare cyclical time of differing cycles.",
+        "i" = "Found {.field {unique(vapply(cycles, time_granule_label, character(1L)))}}."
+      ),
+      call = NULL
+    )
+  }
+  cycle
+}
+
 #' Compute circular rolling sums
 #'
 #' Calculates rolling sums of length `k` for all contiguous subsequences
@@ -22,10 +92,13 @@ check_tz_name <- function(zone) {
 #' that wraps around the vector as if arranged in a circle.
 #'
 #' @param x A numeric vector to compute circular sums over.
-#' @param size Integer; the window size (number of consecutive elements to sum).
-#' @param step Integer; the step size (the increment in starting index for each sum).
+#' @param size Integer; the window size (number of consecutive elements to
+#'   sum). A negative size anchors the window at its end, with the window
+#'   counting backwards.
+#' @param step Integer; the step size (the increment in starting index for
+#'   each sum). A negative step walks the windows backwards around the circle.
 #'
-#' @return A numeric vector containing the sum of each contiguous subsequence 
+#' @return A numeric vector containing the sum of each contiguous subsequence
 #'   around the circle. The length of the resulting vector is the number of
 #'   combinations until the pattern between `x` and `step` repeats
 #'
@@ -37,32 +110,56 @@ check_tz_name <- function(zone) {
 #' # Window of 3 elements
 #' circsum(c(1, 2, 3, 4, 5), 3)
 #' # Returns: 6 10 9 8 12 (1+2+3, 4+5+1, 2+3+4, 5+1+2, 3+4+5)
-#' 
+#'
+#' # Negative step walks the same windows backwards
+#' circsum(c(1, 2, 3, 4, 5), 1, -1)
+#' # Returns: 1 5 4 3 2
+#'
+#' # Negative size anchors each window at its end instead of its start - a
+#' # trailing rather than leading rolling sum
+#' circsum(c(1, 2, 3, 4, 5), -2, 1)
+#' # Returns: 6 3 5 7 9 (5+1, 1+2, 2+3, 3+4, 4+5)
+#'
 #' @export
 circsum <- function(x, size, step = size) {
   n <- length(x)
-  if (n == 0L || size <= 0L || step <= 0L) {
+  size_abs <- abs(size)
+  step_abs <- abs(step)
+  if (n == 0L || size_abs <= 0L || step_abs <= 0L) {
     return(numeric(0))
   }
-  
-  if (size == 1L) {
+
+  # Offsets from `start` covered by one window: forward (0, 1, ..., k - 1)
+  # for a positive size, or backward (-(k - 1), ..., -1, 0) - ending at
+  # `start` - for a negative one. A single-element window (k == 1) is the
+  # same set either way, so the shortcut below doesn't need this.
+  offsets <- seq_len(size_abs) - 1L
+  if (size < 0L) {
+    offsets <- -rev(offsets)
+  }
+
+  if (size_abs == 1L) {
     if (step == 1L) {
       return(x)
     }
-    num_windows <- n / gcd(n, step)
+    num_windows <- n / gcd(n, step_abs)
     indices <- ((seq_len(num_windows) - 1L) * step) %% n + 1L
     return(x[indices])
   }
-  
+
   # Number of unique windows before pattern repeats
-  num_windows <- n / gcd(n, step)
-  
+  num_windows <- n / gcd(n, step_abs)
+
   # Generate all window sums
-  vapply(seq_len(num_windows), function(i) {
-    start <- ((i - 1L) * step) %% n
-    indices <- (start + seq_len(size) - 1L) %% n + 1L
-    sum(x[indices])
-  }, numeric(1))
+  vapply(
+    seq_len(num_windows),
+    function(i) {
+      start <- ((i - 1L) * step) %% n
+      indices <- (start + offsets) %% n + 1L
+      sum(x[indices])
+    },
+    numeric(1)
+  )
 }
 
 gcd <- function(a, b) {
@@ -74,16 +171,30 @@ gcd <- function(a, b) {
   a
 }
 
-# Evaluate time units in a calendar context
-eval_cal <- function(expr, cal) {
-  eval_tidy({{expr}}, data = cal)
+# Floor division of doubles, and the matching remainder.
+#
+# R's `%/%` and `%%` put every double element through a correction step guarding
+# against a quotient landing on the wrong side of an integer (~75x slower).
+# A directly rounded quotient is already exact and needs no correction.
+fdiv <- function(x, y) {
+  floor(x / y)
 }
 
-quo_add_dots <- function(quo, ...){
+fdivmod <- function(x, y) {
+  div <- floor(x / y)
+  list(div = div, mod = x - div * y)
+}
+
+# Evaluate time units in a calendar context
+eval_cal <- function(expr, cal) {
+  eval_tidy({{ expr }}, data = cal)
+}
+
+quo_add_dots <- function(quo, ...) {
   dots <- enquos(...)
   expr <- rlang::quo_get_expr(quo)
   rlang::quo_set_expr(
-    quo, 
+    quo,
     as.call(c(as.list(expr), list2(...)))
   )
 }
@@ -91,13 +202,14 @@ quo_add_dots <- function(quo, ...){
 # Similar to S7::new_S3_class to define S4 methods without depending on packages
 new_S4_class <- function(className, package) {
   methods::newClassRepresentation(
-    className = className, package = package
+    className = className,
+    package = package
   )
 }
 
 # From S7:::topNamespaceName, required for new_time_unit wrapper
 # Wrapper is required to patch https://github.com/RConsortium/S7/issues/609
-topNamespaceName <- function (env = parent.frame()) {
+topNamespaceName <- function(env = parent.frame()) {
   env <- topenv(env)
   if (!isNamespace(env)) {
     return()
@@ -108,13 +220,17 @@ topNamespaceName <- function (env = parent.frame()) {
 # Resolve a cli-style {?singular/plural} or {?zero/singular/plural} tokens
 str_plural <- function(template, n) {
   m <- regexpr("\\{\\?[^}]*\\}", template, perl = TRUE)
-  if (m[[1L]] == -1L) return(rep_len(template, length(n)))
+  if (m[[1L]] == -1L) {
+    return(rep_len(template, length(n)))
+  }
 
   ml <- attr(m, "match.length")
-  parts <- strsplit(substr(template, m + 2L, m + ml - 2L), "/", fixed = TRUE)[[1L]]
+  parts <- strsplit(substr(template, m + 2L, m + ml - 2L), "/", fixed = TRUE)[[
+    1L
+  ]]
   prefix <- substr(template, 1L, m - 1L)
   suffix <- substr(template, m + ml, nchar(template))
-  
+
   # +s suffix if no plural form is provided
   if (length(parts) == 1L) {
     parts <- c(parts, paste0(parts, "s"))

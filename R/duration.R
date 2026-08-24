@@ -4,37 +4,42 @@
 #' Durations represent a fixed span of time measured in a given time granule
 #' (e.g., 3 months, 5 days), without reference to a specific point in time.
 #' 
-#' @param data A time vector of duration magnitudes.
+#' @param data A time vector of duration magnitudes, or an existing
+#'  [duration()] vector to convert to `chronon` granules.
 #' @param chronon A time granule expression representing the chronon, evaluated
 #'  in the context of `calendar`. Use unquoted expressions like `month(1L)` or
-#'  `day(1L)`. Chronons from a specific calendar can also be used (e.g. 
+#'  `day(1L)`. Chronons from a specific calendar can also be used (e.g.
 #'  `cal_gregorian$month(1L)`). Defaults to the time chronon of the input
 #'  `data` (`time_chronon(data)`).
+#' @param discrete Logical. If `TRUE` (default), returns integer durations 
+#'   always rounding down (discrete time model). If `FALSE`, returns fractional 
+#'   durations (continuous time model).
 #' @param calendar Calendar system used to evaluate `chronon`. Defaults to
 #'   `time_calendar(data)` for existing time objects. Common options include
 #'   [cal_gregorian] and [cal_isoweek].
-#' 
+#'
 #' @return A `mixtime` vector containing an `mt_duration` vector.
-#' 
-#' @seealso 
+#'
+#' @seealso
 #' - [new_duration_fn()] for creating reusable duration functions
 #' - [cal_gregorian], [cal_isoweek] for calendar systems
-#' 
+#'
 #' @examples
 #' # A duration of 3 months
 #' duration(3L, cal_gregorian$month(1L))
-#' 
+#'
 #' # A vector of durations in days
 #' duration(1:7, cal_gregorian$day(1L))
-#' 
+#'
+#' # Convert a duration of 4 days into weeks
+#' duration(days(4), cal_isoweek$week(1L), discrete = FALSE)
+#' duration(days(4), cal_isoweek$week(1L), discrete = TRUE)
+#'
 #' @export
 duration <- function(
-  data, chronon = time_chronon(data), calendar = time_calendar(data)
+  data, chronon = time_chronon(data), discrete = NULL,
+  calendar = time_calendar(data)
 ) {
-  if (!is.numeric(data)) {
-    cli::cli_abort("{.var data} must be a numeric vector.", call. = FALSE)
-  }
-
   # Evaluate chronon and cycle with a calendar mask
   quo_chronon <- enquo(chronon)
   chronon <- eval_tidy(quo_chronon, data = calendar, env = emptyenv())
@@ -42,72 +47,59 @@ duration <- function(
   if (!inherits(chronon, "mixtime::mt_unit")) {
     cli::cli_abort("{.var chronon} must be a time granule object.", call. = FALSE)
   }
-  new_mixtime(new_time(data, chronon = chronon, class = "mt_duration"))
-}
 
-#' @method vec_cast.integer mt_duration
-#' @export
-vec_cast.integer.mt_duration <- function(x, to, ...) {
-  vec_cast(vec_data(x), integer())
-}
-
-#' @method vec_cast.double mt_duration
-#' @export
-vec_cast.double.mt_duration <- function(x, to, ...) {
-  vec_cast(vec_data(x), double())
-}
-
-#' @importFrom vctrs vec_arith
-#' @method vec_arith mt_duration
-#' @export
-vec_arith.mt_duration <- function(op, x, y, ...) {
-  UseMethod("vec_arith.mt_duration", y)
-}
-
-#' @method vec_arith.mt_duration mt_duration
-#' @export
-vec_arith.mt_duration.mt_duration <- function(op, x, y, ...) {
-  if (!op %in% c("-", "+", "/")) {
-    cli::cli_abort("Only addition, subtraction, and division are supported between two durations.", call. = FALSE)
+  # Convert an existing duration (mixtime or a bare duration vector) into
+  # the requested chronon.
+  if (time_is_duration(data[1L])) {
+    if (is_mixtime(data)) {
+      if (length(data@x) > 1L) {
+        cli::cli_abort(
+          c(
+            "{.fn duration} currently only supports converting durations with a single chronon.",
+            i = "To combine several chronons, combine several duration vectors with {.fun c}."
+          ),
+          call = NULL
+        )
+      }
+      raw <- data@x[[1L]]
+    } else {
+      raw <- data
+    }
+    from_chronon <- attr(raw, "chronon")
+    if (is.null(discrete)) discrete <- is.integer(vec_data(raw))
+    cardinality <- tryCatch(
+      chronon_cardinality(chronon, from_chronon),
+      error = function(e) {
+        cli::cli_abort(
+          c(
+            "Can't convert a duration from {.val {time_unit_plural(from_chronon)}} to {.val {time_unit_plural(chronon)}}.",
+            i = "Their ratio depends on where in the calendar the duration falls, but a duration has no anchor to resolve that against.",
+            i = "Convert a {.cls mixtime} time point instead, which carries the calendar context this conversion needs."
+          ),
+          call = NULL,
+          parent = e
+        )
+      }
+    )
+    x <- as.numeric(raw) * cardinality
+    if (discrete) x <- as.integer(floor(x))
+    return(new_mixtime(mt_duration(x, chronon = chronon)))
   }
 
-  # Find common chronon for x and y as the basis for arithmetic operations.
-  x_chronon <- attr(x, "chronon")
-  y_chronon <- attr(y, "chronon")
-  tu <- chronon_common_impl(list(x_chronon, y_chronon))
-
-  # Scale magnitudes to common chronon units before performing arithmetic
-  x <- vec_data(x) * chronon_cardinality(tu, x_chronon)
-  y <- vec_data(y) * chronon_cardinality(tu, y_chronon)
-
-  res <- vec_arith_base(op, x, y, ...)
-  if (op == "/") {
-    # duration / duration = numeric ratio
-    return(res)
+  if (S7_inherits(data, mt_time)) {
+    cli::cli_abort(
+      c(
+        "{.var data} already has chronon {.val {time_unit_plural(attr(data, 'chronon'))}}, but it isn't a duration.",
+        i = "{.fn duration} converts duration vectors; use {.fn mixtime} to convert time points."
+      ),
+      call = NULL
+    )
   }
 
-  # Return a duration with the common chronon
-  new_time(res, chronon = tu, class = "mt_duration")
-}
-
-#' @method vec_arith.mt_duration numeric
-#' @export
-vec_arith.mt_duration.numeric <- function(op, x, y, ...) {
-  if (!op %in% c("+", "-", "*", "/")) {
-    stop("Only addition, subtraction, multiplication, and division supported for time durations", call. = FALSE)
+  if (!is.numeric(data)) {
+    cli::cli_abort("{.var data} must be a numeric vector.", call. = FALSE)
   }
-  res <- vec_arith_base(op, x, y, ...)
-  vec_restore(res, x)
-}
-
-#' @method vec_arith.numeric mt_duration
-#' @export
-vec_arith.numeric.mt_duration <- function(op, x, y, ...) {
-  if (!op %in% c("+", "-", "*")) {
-    stop("Only addition, subtraction, and multiplication supported for time durations", call. = FALSE)
-  }
-  res <- vec_arith_base(op, x, y, ...)
-  vec_restore(res, y)
+  new_mixtime(mt_duration(data, chronon = chronon))
 }
 
 #' Duration function factory

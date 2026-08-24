@@ -54,6 +54,37 @@ method(chronon_format_linear, list(cal_isoweek$day, S7::new_S3_class("cal_isowee
 method(chronon_format_cyclical, list(cal_isoweek$day, cal_isoweek$week)) <- function(x, y) "{cyc(day,week,label=TRUE)}"
 method(chronon_format_cyclical, list(cal_isoweek$week, cal_isoweek$year)) <- function(x, y) "W{cyc(week,year)}"
 
+# Candidate parsing formats
+method(chronon_parse_linear, list(cal_isoweek$week, class_any)) <- function(x, cal) {
+  parse_format(
+    # e.g. "2024-W01", "2024W01", "2024 w1"
+    "{lin(year)}[-\\s]*[Ww]{cyc(week,year)}",
+    # e.g. "W01-2024", "w1 2024"
+    "[Ww]{cyc(week,year)}[-\\s]+{lin(year)}",
+    regex = TRUE
+  )
+}
+method(chronon_parse_linear, list(cal_isoweek$day, S7::new_S3_class("cal_isoweek"))) <- function(x, cal) {
+  parse_format(
+    # e.g. "2024-W01-3", "2024W01 Wed", "2024 w1 Wednesday"
+    "{lin(year)}[-\\s]*[Ww]{cyc(week,year)}[-\\s]+{cyc(day,week)}",
+    # e.g. "Wed W01-2024", "3 w1 2024"
+    "{cyc(day,week)}[-\\s]+[Ww]{cyc(week,year)}[-\\s]+{lin(year)}",
+    regex = TRUE
+  )
+}
+method(chronon_parse_cyclical, list(cal_isoweek$day, cal_isoweek$week)) <- function(x, y) {
+  # e.g. "3", "Wed", "Wednesday"
+  parse_format("{cyc(day,week)}")
+}
+method(chronon_parse_cyclical, list(cal_isoweek$week, cal_isoweek$year)) <- function(x, y) {
+  parse_format(
+    # e.g. "1", "W1", "w01"
+    "[Ww]?{cyc(week,year)}",
+    regex = TRUE
+  )
+}
+
 method(chronon_cardinality, list(cal_isoweek$week, cal_isoweek$year)) <- function(x, y, at = NULL) {
   if(y@n != 1L) {
     cli::cli_abort("The number of weeks in multi-year chronons is not yet supported.")
@@ -66,8 +97,8 @@ method(chronon_cardinality, list(cal_isoweek$week, cal_isoweek$year)) <- functio
   ifelse(p == 4 | (p == 3 & is_leap_year(year)), 53L, 52L)  
 }
 
-method(chronon_cardinality, list(cal_isoweek$day, cal_isoweek$week)) <- function(x, y, at = NULL) {
-  y@n*7L/x@n
+method(chronon_cardinality_fixed, list(cal_isoweek$day, cal_isoweek$week)) <- function(x, y) {
+  7L
 }
 
 method(chronon_divmod, list(cal_isoweek$day, cal_isoweek$week)) <- function(from, to, x) {
@@ -158,17 +189,10 @@ method(chronon_divmod, list(cal_isoweek$year, cal_isoweek$week)) <- function(fro
 week.abb <- c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 week.name <- c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
-method(cyclical_labels, list(cal_isoweek$day, cal_isoweek$week)) <- function(granule, cycle, i, label = FALSE, abbreviate = TRUE) {
-  # TODO: Add offset for different week starting days
-  if (!label) {
-    as.character(i + 1L)
-  } else if (abbreviate) {
-    week.abb[i + 1L]
-  } else {
-    week.name[i + 1L]
-  }
-}
-method(cyclical_labels, list(cal_isoweek$week, S7::class_any)) <- function(granule, cycle, i) {
-  # Weeks count with 1-indexing
-  sprintf("%02d", i + 1L)
-}
+# TODO: Add offset for different week starting days
+method(cyclical_labels, list(cal_isoweek$day, cal_isoweek$week)) <- label_scheme(
+  start = 1L,
+  vocab = vocab_table(`en-GB` = list(wide = week.name, abbreviated = week.abb))
+)
+# Weeks count with 1-indexing
+method(cyclical_labels, list(cal_isoweek$week, S7::class_any)) <- label_scheme(start = 1L, width = 2L)

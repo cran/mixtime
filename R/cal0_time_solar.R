@@ -118,29 +118,70 @@ method(chronon_format_linear, list(cal_time_solar$arcminute, class_any)) <- func
 method(chronon_format_linear, list(cal_time_solar$arcsecond, class_any)) <- function(x, cal) paste(chronon_format_linear(cal$day(1L), cal), "{cyc(degree,day)}\u00b0{cyc(arcminute,degree)}'{cyc(arcsecond,arcminute)}\"")
 method(chronon_format_linear, list(cal_time_solar$illumination, class_any)) <- function(x, cal) "{lin(day)} {lin(illumination)}"
 
+# Candidate parsing formats
+method(chronon_parse_linear, list(cal_time_solar$hour, class_any)) <- function(x, cal) {
+  parse_format_time_of_day(
+    cal,
+    c(
+      " {cyc(hour,day)}h",
+      " {cyc(hour,ampm)} {cyc(ampm,day,label=TRUE)}"
+    )
+  )
+}
+method(chronon_parse_linear, list(cal_time_solar$minute, class_any)) <- function(x, cal) {
+  parse_format_time_of_day(
+    cal,
+    c(
+      " {cyc(hour,day)}:{cyc(minute,hour)}",
+      " {cyc(hour,ampm)}:{cyc(minute,hour)} {cyc(ampm,day,label=TRUE)}"
+    )
+  )
+}
+method(chronon_parse_linear, list(cal_time_solar$second, class_any)) <- function(x, cal) {
+  parse_format_time_of_day(
+    cal,
+    c(
+      " {cyc(hour,day)}:{cyc(minute,hour)}:{cyc(second,minute)}",
+      " {cyc(hour,ampm)}:{cyc(minute,hour)}:{cyc(second,minute)} {cyc(ampm,day,label=TRUE)}"
+    )
+  )
+}
+method(chronon_parse_linear, list(cal_time_solar$degree, class_any)) <- function(x, cal) {
+  parse_format_time_of_day(cal, " {cyc(degree,day)}\u00b0")
+}
+method(chronon_parse_linear, list(cal_time_solar$arcminute, class_any)) <- function(x, cal) {
+  parse_format_time_of_day(cal, " {cyc(degree,day)}\u00b0{cyc(arcminute,degree)}'")
+}
+method(chronon_parse_linear, list(cal_time_solar$arcsecond, class_any)) <- function(x, cal) {
+  parse_format_time_of_day(cal, " {cyc(degree,day)}\u00b0{cyc(arcminute,degree)}'{cyc(arcsecond,arcminute)}\"")
+}
+
 # Solar time
-method(chronon_cardinality, list(cal_time_solar$ampm, cal_time_solar$day)) <- function(x, y, at = NULL) {
-  y@n * 2L / x@n
+method(chronon_cardinality_fixed, list(cal_time_solar$ampm, cal_time_solar$day)) <- function(x, y) {
+  2L
 }
-method(chronon_cardinality, list(cal_time_solar$hour, cal_time_solar$day)) <- function(x, y, at = NULL) {
-  y@n * 24L / x@n
+method(chronon_cardinality_fixed, list(cal_time_solar$hour, cal_time_solar$day)) <- function(x, y) {
+  24L
 }
-method(chronon_cardinality, list(cal_time_solar$minute, cal_time_solar$hour)) <- function(x, y, at = NULL) {
-  y@n * 60L / x@n
+method(chronon_cardinality_fixed, list(cal_time_solar$hour, cal_time_solar$ampm)) <- function(x, y) {
+  12L
 }
-method(chronon_cardinality, list(cal_time_solar$second, cal_time_solar$minute)) <- function(x, y, at = NULL) {
-  y@n * 60L / x@n
+method(chronon_cardinality_fixed, list(cal_time_solar$minute, cal_time_solar$hour)) <- function(x, y) {
+  60L
+}
+method(chronon_cardinality_fixed, list(cal_time_solar$second, cal_time_solar$minute)) <- function(x, y) {
+  60L
 }
 
 # Solar arc time
-method(chronon_cardinality, list(cal_time_solar$degree, cal_time_solar$day)) <- function(x, y, at = NULL) {
-  y@n * 360L / x@n
+method(chronon_cardinality_fixed, list(cal_time_solar$degree, cal_time_solar$day)) <- function(x, y) {
+  360L
 }
-method(chronon_cardinality, list(cal_time_solar$arcminute, cal_time_solar$degree)) <- function(x, y, at = NULL) {
-  y@n * 60L / x@n
+method(chronon_cardinality_fixed, list(cal_time_solar$arcminute, cal_time_solar$degree)) <- function(x, y) {
+  60L
 }
-method(chronon_cardinality, list(cal_time_solar$arcsecond, cal_time_solar$arcminute)) <- function(x, y, at = NULL) {
-  y@n * 60L / x@n
+method(chronon_cardinality_fixed, list(cal_time_solar$arcsecond, cal_time_solar$arcminute)) <- function(x, y) {
+  60L
 }
 
 # Solar illumination phases
@@ -191,7 +232,7 @@ method(chronon_divmod, list(cal_time_solar$illumination, cal_time_solar$second))
 
 ## Time labels
 ### Linear labels for solar days (re-use Gregorian dates)
-S7::method(linear_labels, cal_time_solar$day) <- function(granule, i, ...) {
+S7::method(linear_labels_format, cal_time_solar$day) <- function(granule, i, ...) {
   return(format(.Date(i * granule@n)))
 }
 
@@ -201,21 +242,25 @@ solar_illumination_phases <- c(
   "astronomical dawn", "nautical dawn", "civil dawn", "day",
   "civil dusk", "nautical dusk", "astronomical dusk", "night"
 )
-method(linear_labels, cal_time_solar$illumination) <- function(granule, i) {
+method(linear_labels_format, cal_time_solar$illumination) <- function(granule, i, ...) {
   solar_illumination_phases[floor((i * granule@n)%%8) + 1L]
 }
 
-# method(cyclical_labels, list(cal_time_solar$illumination, cal_time_solar$day)) <- function(granule, cycle, i) {
+# method(cyclical_labels_format, list(cal_time_solar$illumination, cal_time_solar$day)) <- function(granule, cycle, i) {
 #   solar_illumination_phases[i + 1L]
 # }
 
-solar_ampm_labels <- c("AM", "PM")
-method(cyclical_labels, list(cal_time_solar$ampm, cal_time_solar$day)) <- function(granule, cycle, i) {
-  solar_ampm_labels[i + 1L]
-}
+method(cyclical_labels, list(cal_time_solar$ampm, cal_time_solar$day)) <- label_scheme(
+  start = 0L,
+  vocab = vocab_table(`en-GB` = list(wide = c("AM", "PM"), abbreviated = c("AM", "PM"))),
+  transform = list(
+    encode = function(i, at = NULL) i + 1L,
+    decode = function(d, at = NULL) d - 1L
+  )
+)
 
-method(cyclical_labels, list(cal_time_solar$hour, S7::class_any)) <- function(granule, cycle, i) {
-  if (S7::S7_inherits(cycle, cal_time_civil$ampm)) {
+method(cyclical_labels_format, list(cal_time_solar$hour, S7::class_any)) <- function(granule, cycle, i, at = NULL, ...) {
+  if (S7_inherits(cycle, cal_time_solar$ampm)) {
     # 12 hours count with 12,1,2,...,11
     sprintf("%02d", (i-1L)%%12L + 1L)
   } else {
@@ -223,18 +268,33 @@ method(cyclical_labels, list(cal_time_solar$hour, S7::class_any)) <- function(gr
     sprintf("%02d", i)
   }
 }
-method(cyclical_labels, list(cal_time_solar$minute, S7::class_any)) <- function(granule, cycle, i) {
-  sprintf("%02d", i)
+method(cyclical_labels_parse, list(cal_time_solar$hour, S7::class_any)) <- function(granule, cycle, ...) {
+  list(
+    pattern = "\\d+",
+    decode = function(text, at = NULL) {
+      d <- as.integer(text)
+      if (S7_inherits(cycle, cal_time_solar$ampm)) d %% 12L else d
+    }
+  )
 }
-method(cyclical_labels, list(cal_time_solar$second, S7::class_any)) <- function(granule, cycle, i) {
-  sprintf("%02d", i)
-}
-method(cyclical_labels, list(cal_time_solar$degree, S7::class_any)) <- function(granule, cycle, i) {
+
+# Minutes/seconds count with 0-indexing -- plain numeric (tier 1).
+method(cyclical_labels, list(cal_time_solar$minute, S7::class_any)) <- label_scheme(start = 0L, width = 2L)
+method(cyclical_labels, list(cal_time_solar$second, S7::class_any)) <- label_scheme(start = 0L, width = 2L)
+
+method(cyclical_labels_format, list(cal_time_solar$degree, S7::class_any)) <- function(granule, cycle, i, at = NULL, ...) {
   sprintf("%03d", (i - 180L*chronon_cardinality(cycle, cal_time_solar$day(1L))) %% 360L)
 }
-method(cyclical_labels, list(cal_time_solar$arcminute, S7::class_any)) <- function(granule, cycle, i) {
-  sprintf("%02d", i)
+method(cyclical_labels_parse, list(cal_time_solar$degree, S7::class_any)) <- function(granule, cycle, ...) {
+  list(
+    pattern = "\\d+",
+    decode = function(text, at = NULL) {
+      shift <- 180L * chronon_cardinality(cycle, cal_time_solar$day(1L))
+      (as.integer(text) + shift) %% 360L
+    }
+  )
 }
-method(cyclical_labels, list(cal_time_solar$arcsecond, S7::class_any)) <- function(granule, cycle, i) {
-  sprintf("%02d", i)
-}
+
+# Arcminutes/arcseconds count with 0-indexing -- plain numeric (tier 1).
+method(cyclical_labels, list(cal_time_solar$arcminute, S7::class_any)) <- label_scheme(start = 0L, width = 2L)
+method(cyclical_labels, list(cal_time_solar$arcsecond, S7::class_any)) <- label_scheme(start = 0L, width = 2L)

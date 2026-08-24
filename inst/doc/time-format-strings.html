@@ -383,16 +383,19 @@ granules from a calendar, for example the format codes for
 in the time format string with glue substitutions:
 <code>&quot;{lin(year(1L))}-{cyc(month(1L), year(1L))}&quot;</code>.</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">format</span>(<span class="fu">date</span>(<span class="fu">Sys.Date</span>()), <span class="at">format =</span> <span class="st">&quot;{lin(year(1L))}-{cyc(month(1L), year(1L))}&quot;</span>)</span>
-<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a><span class="co">#&gt; [1] &quot;2026-06&quot;</span></span></code></pre></div>
-<p>The linear labels are produced by <code>linear_labels()</code>, and
-the cyclical labels are produced by <code>cyclical_labels()</code>. When
-formatting mixtime vectors, additional arguments passed to
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a><span class="co">#&gt; [1] &quot;2026-08&quot;</span></span></code></pre></div>
+<p>The linear labels are produced by
+<code>linear_labels_format()</code>, and the cyclical labels are
+produced by <code>cyclical_labels_format()</code> – see
+<code>linear_labels()</code>/<code>cyclical_labels()</code> for how a
+calendar declares these (and their text-parsing inverse) in one step.
+When formatting mixtime vectors, additional arguments passed to
 <code>lin()</code> and <code>cyc()</code> are forwarded to the label
 helper functions. Common arguments include <code>label = TRUE</code> to
 get named labels (e.g. “January”), and <code>abbreviate = TRUE</code>
 for short names (e.g. “Jan” instead of “January”).</p>
 <div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="fu">format</span>(<span class="fu">date</span>(<span class="fu">Sys.Date</span>()), <span class="at">format =</span> <span class="st">&quot;{lin(year)} {cyc(month, year, label = TRUE, abbreviate = TRUE)}&quot;</span>)</span>
-<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a><span class="co">#&gt; [1] &quot;2026 Jun&quot;</span></span></code></pre></div>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a><span class="co">#&gt; [1] &quot;2026 Aug&quot;</span></span></code></pre></div>
 <p>Default format strings for each chronon (and cycle) are provided by
 methods of the <code>chronon_format_linear()</code> and
 <code>chronon_format_cyclical()</code> generics (see
@@ -400,7 +403,7 @@ methods of the <code>chronon_format_linear()</code> and
 format string for a time with a 1-month chronon is
 <code>&quot;{lin(year)}-{cyc(month, year)}&quot;</code>:</p>
 <div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="fu">format</span>(<span class="fu">linear_time</span>(<span class="fu">Sys.Date</span>(), <span class="at">chronon =</span> cal_gregorian<span class="sc">$</span><span class="fu">month</span>(<span class="dv">1</span><span class="dt">L</span>)))</span>
-<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a><span class="co">#&gt; [1] &quot;2026 Jun&quot;</span></span></code></pre></div>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a><span class="co">#&gt; [1] &quot;2026 Aug&quot;</span></span></code></pre></div>
 <p>The granules used in the format string are calendar-aware, so they
 inherit attributes from the data being formatted. This includes the
 calendar (e.g. <code>cal_gregorian</code>) and granule attributes
@@ -421,18 +424,18 @@ format(
   datetime(Sys.time(), tz = "UTC"), 
   format = paste(fmt_time, "{tz(.time)}", fmt_time_mel)
 )
-#> [1] "2026-06-28 11:22:11 UTC (11:22:11 AEST)"
+#> [1] "2026-08-24 04:50:59 UTC (04:50:59 AEST)"
 ```
 -->
 <p>For example, the lunar phase can be added to a date format string by
 including the <code>phase</code> granule from the
 <code>cal_time_lunar</code> calendar. We can also set
-<code>emoji = TRUE</code> to get a lunar phase emoji instead of a
-numeric index:</p>
+<code>type = &quot;emoji&quot;</code> to get a lunar phase emoji instead of the
+named phase:</p>
 <div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>fmt_date  <span class="ot">&lt;-</span> <span class="st">&quot;{lin(year)}-{cyc(month, year)}-{cyc(day, month)}&quot;</span></span>
-<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a>fmt_lunar <span class="ot">&lt;-</span> <span class="st">&quot;{with(cal_time_lunar, cyc(phase, month, emoji = TRUE))}&quot;</span></span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a>fmt_lunar <span class="ot">&lt;-</span> <span class="st">&quot;{with(cal_time_lunar, cyc(phase, month, label = TRUE, type = </span><span class="sc">\&quot;</span><span class="st">emoji</span><span class="sc">\&quot;</span><span class="st">))}&quot;</span></span>
 <span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a><span class="fu">format</span>(<span class="fu">date</span>(<span class="fu">Sys.Date</span>()), <span class="at">format =</span> <span class="fu">paste</span>(fmt_date, fmt_lunar))</span>
-<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a><span class="co">#&gt; [1] &quot;2026-06-28 🌔&quot;</span></span></code></pre></div>
+<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a><span class="co">#&gt; [1] &quot;2026-08-24 🌔&quot;</span></span></code></pre></div>
 <p>This makes the relationship between the format string and the
 calendar structure transparent, and means the same format-string idiom
 works unchanged across calendars.</p>
@@ -485,9 +488,9 @@ more verbose than the equivalent <code>strftime</code> format string
 generalisable to other combinations of granules.</p>
 <div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="co"># YYYY-MM-DD format for a Gregorian date</span></span>
 <span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a><span class="fu">format</span>(<span class="fu">date</span>(<span class="fu">Sys.Date</span>()), <span class="at">format =</span> <span class="st">&quot;{lin(year)}-{cyc(month, year)}-{cyc(day, month)}&quot;</span>)</span>
-<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a><span class="co">#&gt; [1] &quot;2026-06-28&quot;</span></span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a><span class="co">#&gt; [1] &quot;2026-08-24&quot;</span></span>
 <span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a><span class="fu">format</span>(<span class="fu">Sys.Date</span>(), <span class="at">format =</span> <span class="st">&quot;%Y-%m-%d&quot;</span>)</span>
-<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a><span class="co">#&gt; [1] &quot;2026-06-28&quot;</span></span></code></pre></div>
+<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a><span class="co">#&gt; [1] &quot;2026-08-24&quot;</span></span></code></pre></div>
 <p>This simplifies the construction of less common time formats, for
 example the year-day format (<code>YYYY-DDD</code>), which is
 <code>&quot;{lin(year)}-D{cyc(day, year)}&quot;</code> in mixtime but
@@ -495,9 +498,9 @@ example the year-day format (<code>YYYY-DDD</code>), which is
 a non-obvious code for “day of year”).</p>
 <div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="co"># YYY-DDD format for a Gregorian date</span></span>
 <span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a><span class="fu">format</span>(<span class="fu">date</span>(<span class="fu">Sys.Date</span>()), <span class="at">format =</span> <span class="st">&quot;{lin(year)}-D{cyc(day, year)}&quot;</span>)</span>
-<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a><span class="co">#&gt; [1] &quot;2026-D179&quot;</span></span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a><span class="co">#&gt; [1] &quot;2026-D236&quot;</span></span>
 <span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a><span class="fu">format</span>(<span class="fu">Sys.Date</span>(), <span class="at">format =</span> <span class="st">&quot;%Y-D%j&quot;</span>)</span>
-<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a><span class="co">#&gt; [1] &quot;2026-D179&quot;</span></span></code></pre></div>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a><span class="co">#&gt; [1] &quot;2026-D236&quot;</span></span></code></pre></div>
 <p>Format strings for non-Gregorian calendars are also more intuitive,
 since the granules are specified in reference to units of calendar
 systems. For example, the format string for ISO week dates
@@ -513,9 +516,9 @@ get wrong.</p>
 <span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>  <span class="fu">date</span>(<span class="fu">Sys.Date</span>(), <span class="at">calendar =</span> cal_isoweek),</span>
 <span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a>  <span class="at">format =</span> <span class="st">&quot;{lin(year)}-W{cyc(week, year)}-{cyc(day, week, label = TRUE)}&quot;</span></span>
 <span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a>)</span>
-<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a><span class="co">#&gt; [1] &quot;2026-W26-Sun&quot;</span></span>
+<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a><span class="co">#&gt; [1] &quot;2026-W35-Mon&quot;</span></span>
 <span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a><span class="fu">format</span>(<span class="fu">Sys.Date</span>(), <span class="at">format =</span> <span class="st">&quot;%G-W%V-%a&quot;</span>)</span>
-<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a><span class="co">#&gt; [1] &quot;2026-W26-Sun&quot;</span></span></code></pre></div>
+<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a><span class="co">#&gt; [1] &quot;2026-W35-Mon&quot;</span></span></code></pre></div>
 <p>The table below maps every
 <code>strftime</code>/<code>strptime</code> conversion specification to
 its mixtime equivalent. There are many more possible mixtime format
@@ -585,7 +588,7 @@ Show/hide POSIX and mixtime equivalent code table
 </tr>
 <tr class="even">
 <td><code>%p</code></td>
-<td><code>{cyc(ampm, day)}</code></td>
+<td><code>{cyc(ampm, day, label = TRUE)}</code></td>
 <td>AM/PM indicator</td>
 </tr>
 <tr class="odd">

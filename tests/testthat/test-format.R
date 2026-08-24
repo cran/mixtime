@@ -57,3 +57,31 @@ test_that("format() handles special values in cyclical time", {
   expect_equal(result[[2]], " NA")
   expect_equal(result[[3]], "Inf")
 })
+
+test_that("format() reports an unmatched granule in the format string", {
+  # Granules are S7 scalars, so their size comes from @n rather than vec_data()
+  expect_error(
+    mt_unit_display(
+      cal_gregorian$day(2L),
+      units = list(cal_gregorian$day(1L)),
+      parts = list(1L)
+    ),
+    "2 days"
+  )
+})
+
+test_that("format() falls back to the generic mt_unit template for a naive-tz civil chronon", {
+  # A common chronon between an untimezoned Date and a zoned datetime is
+  # genuinely tz-naive; its calendar has no year/month, so the default
+  # templates must not reference them (see tz-merge.md). Instead they defer
+  # (via S7::super()) to the same generic mt_unit fallback used for any other
+  # chronon without a bespoke format template.
+  combined <- c(date(Sys.Date()), datetime(as.POSIXct("2015-01-01", tz = "UTC")))
+  ch <- chronon_common(combined)
+  expect_true(is.na(tz_name(ch)))
+  expect_null(time_calendar(ch)$year)
+
+  naive_second <- vecvec::unvecvec(mixtime(as.numeric(combined), chronon = ch, discrete = FALSE))
+  expect_no_error(out <- format(naive_second))
+  expect_match(out, "^D[0-9]")
+})
