@@ -77,11 +77,53 @@ test_that("format() falls back to the generic mt_unit template for a naive-tz ci
   # (via S7::super()) to the same generic mt_unit fallback used for any other
   # chronon without a bespoke format template.
   combined <- c(date(Sys.Date()), datetime(as.POSIXct("2015-01-01", tz = "UTC")))
-  ch <- chronon_common(combined)
+  ch <- chronon_glb(combined)
   expect_true(is.na(tz_name(ch)))
   expect_null(time_calendar(ch)$year)
 
   naive_second <- vecvec::unvecvec(mixtime(as.numeric(combined), chronon = ch, discrete = FALSE))
   expect_no_error(out <- format(naive_second))
   expect_match(out, "^D[0-9]")
+})
+
+test_that("format() describes a time unit", {
+  expect_identical(format(cal_gregorian$month(1L)), "1 month")
+  expect_identical(format(cal_gregorian$minute(15L)), "15 minutes")
+  expect_identical(format(cal_isoweek$week(1L)), "1 week")
+})
+
+test_that("format() of continuous time ignores floating-point error at unit boundaries", {
+  # 03:30:00 AEDT, stored one ULP below the boundary (as a conversion from a
+  # continuous day on a 23-hour day gives)
+  tz <- "Australia/Melbourne"
+  sec <- cal_gregorian$second(1L, tz = tz)
+  x <- linear_time(1759595400 - 2.4e-7, chronon = sec, discrete = FALSE)
+  expect_equal(format(x), "2025-10-05 03:30:00 0.0% AEDT")
+
+  hr <- cal_gregorian$hour(1L, tz = "UTC")
+  expect_equal(
+    format(linear_time(488776.5 - 6e-11, chronon = hr, discrete = FALSE), "{frac(.time)}"),
+    "50.0%"
+  )
+})
+
+test_that("format() zero-pads microsecond and nanosecond chronons to 6 and 9 digits", {
+  expect_equal(
+    chronon_format_linear(cal_gregorian$microsecond(1L)),
+    "{lin(year)}-{cyc(month,year)}-{cyc(day,month)} {cyc(hour, day)}:{cyc(minute, hour)}:{cyc(second, minute)}.{cyc(microsecond, second)}"
+  )
+  expect_equal(
+    format(linear_time(1000056L, chronon = cal_gregorian$microsecond(1L))),
+    "1970-01-01 00:00:01.000056"
+  )
+  expect_equal(
+    format(linear_time(1000000056L, chronon = cal_gregorian$nanosecond(1L))),
+    "1970-01-01 00:00:01.000000056"
+  )
+})
+
+test_that("chronon_divmod() across several granules works on vectors", {
+  res <- chronon_divmod(cal_gregorian$microsecond(1L), cal_gregorian$second(1L), c(1500000, 2, NA))
+  expect_equal(res$div, c(1, 0, NA))
+  expect_equal(res$mod, c(500000, 2, NA))
 })

@@ -1,12 +1,20 @@
 Package: mixtime
 Title: Mixed Temporal Vectors and Operations
-Version: 0.3.0
+Version: 0.4.0
 Authors@R: 
     c(person(given = "Mitchell",
              family = "O'Hara-Wild",
              email = "mail@mitchelloharawild.com",
              role = c("aut", "cre"),
-             comment = c(ORCID = "0000-0001-6729-7695")))
+             comment = c(ORCID = "0000-0001-6729-7695")),
+      person(given = "Cynthia",
+             family = "Huang",
+             role = "ctb",
+             comment = c(ORCID = "0000-0002-9218-987X")),
+      person(given = "Rob",
+             family = "Hyndman",
+             role = "ctb",
+             comment = c(ORCID = "0000-0002-2140-5352")))
 Description: Flexible time classes for time series analysis and forecasting with
     mixed temporal granularities. Supports linear and cyclical time 
     representations in discrete and continuous forms, with timezone support, 
@@ -37,9 +45,11 @@ RdMacros: lifecycle
 VignetteBuilder: knitr
 Config/roxygen2/version: 8.0.0
 NeedsCompilation: yes
-Packaged: 2026-08-24 04:50:59 UTC; mitchell
+Packaged: 2026-10-13 01:46:36 UTC; mitchell
 Author: Mitchell O'Hara-Wild [aut, cre] (ORCID:
-    <https://orcid.org/0000-0001-6729-7695>)
+    <https://orcid.org/0000-0001-6729-7695>),
+  Cynthia Huang [ctb] (ORCID: <https://orcid.org/0000-0002-9218-987X>),
+  Rob Hyndman [ctb] (ORCID: <https://orcid.org/0000-0002-2140-5352>)
 Maintainer: Mitchell O'Hara-Wild <mail@mitchelloharawild.com>
 Repository: CRAN
-Date/Publication: 2026-08-24 05:30:02 UTC
+Date/Publication: 2026-10-13 03:40:02 UTC

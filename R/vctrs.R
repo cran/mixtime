@@ -35,7 +35,7 @@ method(vec_proxy_order, class_mixtime) <- function(x, ...) {
 
   # The granules each part is reduced to, read before converting the parts below
   # replaces them with bare chronon counts carrying neither granule.
-  chronon <- chronon_common_impl(lapply(x@x, function(v) attr(v, "chronon")))
+  chronon <- chronon_glb_impl(lapply(x@x, function(v) attr(v, "chronon")))
   cycle <- if (identical(mode, "cyclical")) check_common_cycle(x)
 
   # Convert all time values to a common chronon, which a single part already is
@@ -92,6 +92,12 @@ mt_cast_to_POSIXct <- function(x, to, ...) {
 
 # --- casts from a base type to a time vector ---
 mt_cast_from_numeric <- function(x, to, ...) {
+  # Bare numbers are read as `mixtime()` reads them, so a time point counts from
+  # its chronon's epoch (e.g. 2026 is the year 2026). Durations have no epoch.
+  if (!S7_inherits(to, mt_duration)) {
+    epoch <- chronon_epoch(attr(to, "chronon"))
+    if (epoch != 0L) x <- x - epoch
+  }
   attributes(x) <- attributes(to)
   x
 }
@@ -113,7 +119,7 @@ mt_cast_from_character <- function(x, to, ...) {
 # format and comparison time. Unlike a chronon - where the finest common granule
 # represents both operands losslessly - any granule common to two different
 # cycles has *fewer* distinct positions than either operand, so
-# `chronon_common_impl()` is not the applicable operation (week + year would give
+# `chronon_glb_impl()` is not the applicable operation (week + year would give
 # a one-day cycle, collapsing every value to the same position). Two cyclical
 # vectors therefore combine only when they share a cycle, once naive properties
 # (tz / location) have been reconciled between them.
@@ -134,7 +140,8 @@ mt_cast_time_time <- function(x, to, ..., x_arg = "", to_arg = "") {
   if (S7_inherits(to, mt_duration)) {
     discrete <- is.integer(vec_data(to))
     x <- as.numeric(x) * chronon_cardinality(attr(to, "chronon"), attr(x, "chronon"))
-    if (discrete) x <- as.integer(x)
+    # Whole granules only, as in `duration()`
+    if (discrete) x <- as.integer(trunc(round_ulp(x)))
     attributes(x) <- attributes(to)
     return(x)
   }
@@ -170,12 +177,12 @@ mt_ptype2_time_time <- function(x, y, ..., x_arg = "", y_arg = "") {
       )
     }
     return(mt_cyclical(
-      chronon = chronon_common_impl(list(attr(x, "chronon"), attr(y, "chronon"))),
+      chronon = chronon_glb_impl(list(attr(x, "chronon"), attr(y, "chronon"))),
       cycle = cycle
     ))
   }
   data <- vec_ptype2(vec_data(x), vec_data(y))
-  chronon <- chronon_common_impl(list(attr(x, "chronon"), attr(y, "chronon")))
+  chronon <- chronon_glb_impl(list(attr(x, "chronon"), attr(y, "chronon")))
   if (x_dur) {
     mt_duration(data, chronon = chronon)
   } else {

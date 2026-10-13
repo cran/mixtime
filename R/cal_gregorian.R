@@ -75,20 +75,20 @@ method(chronon_format_cyclical,
 method(chronon_parse_linear, list(cal_gregorian$month, class_any)) <-
   function(x, cal) {
     parse_format(
-      # e.g. "2024-03", "2024 Mar", "2024, March"
-      "{lin(year)}[-/,\\s]+{cyc(month,year)}",
-      # e.g. "03-2024", "Mar 2024", "March, 2024"
-      "{cyc(month,year)}[-/,\\s]+{lin(year)}",
+      # e.g. "2024-03", "2024 Mar", "2024, March", "2024 M03", "2024M3",
+      "[[:space:]]*{lin(year)}(?:[-/,._[:space:]]*(?i:months?|mth|m)[-/,._[:space:]]*|[-/,._[:space:]]+|(?=[[:alpha:]])){cyc(month,year)}[[:space:]]*",
+      # e.g. "03-2024", "Mar 2024", "March, 2024", "M03 2024"
+      "[[:space:]]*(?:(?i:months?|mth|m)[-/,._[:space:]]*)?{cyc(month,year)}[-/,._[:space:]]+{lin(year)}[[:space:]]*",
       regex = TRUE
     )
   }
 method(chronon_parse_linear, list(cal_gregorian$quarter, class_any)) <-
   function(x, cal) {
     parse_format(
-      # e.g. "2024 Q1", "2024-Q1", "2024/1"
-      "{lin(year)}[-/,\\s]+[Qq]?{cyc(quarter,year)}",
-      # e.g. "Q1 2024", "Q1, 2024", "1 2024"
-      "[Qq]?{cyc(quarter,year)}[-/,\\s]+{lin(year)}",
+      # e.g. "2024 Q1", "2024-Q1", "2024/1", "2024Q1", "2024 Quarter 1"
+      "[[:space:]]*{lin(year)}(?:[-/,._[:space:]]*(?i:quarters?|qtr|q)[-/,._[:space:]]*|[-/,._[:space:]]+){cyc(quarter,year)}[[:space:]]*",
+      # e.g. "Q1 2024", "Q1, 2024", "1 2024", "Quarter 1 2024"
+      "[[:space:]]*(?:(?i:quarters?|qtr|q)[-/,._[:space:]]*)?{cyc(quarter,year)}[-/,._[:space:]]+{lin(year)}[[:space:]]*",
       regex = TRUE
     )
   }
@@ -153,7 +153,9 @@ monthdays <- c(31L, 28L, 31L, 30L, 31L, 30L, 31L, 31L, 30L, 31L, 30L, 31L)
 
 is_leap_year <- function(year) {
   year <- floor(year)
-  (year %% 4L == 0L & year %% 100L != 0L) | (year %% 400L == 0L)
+  # Divisibility via floor() rather than %%, which is much slower on doubles
+  divisible <- function(n) year == n * floor(year / n)
+  (divisible(4) & !divisible(100)) | divisible(400)
 }
 
 # Days since epoch (1970-01-01) to the 1st of the Gregorian month
@@ -320,7 +322,7 @@ method(chronon_divmod, list(cal_gregorian$day, cal_gregorian$year)) <- function(
   year <- yoe + era * 400L + (month <= 2L) # year (proleptic Gregorian)
 
   ly <- is_leap_year(year)
-  yday <- (doy + 59 + ly) %% (365L + ly)
+  yday <- fmod(doy + 59 + ly, 365L + ly)
 
   list(
     div = year - 1970L,
@@ -364,10 +366,10 @@ bc_ad_format <- function(granule, i, ...) {
 }
 bc_ad_parse <- function(granule, ...) {
   list(
-    pattern = "\\d+(?:BC)?",
+    pattern = "\\d+(?:(?i:BC))?",
     decode = function(text, at = NULL) {
-      bc <- grepl("BC$", text)
-      n <- as.integer(sub("BC$", "", text))
+      bc <- grepl("BC$", text, ignore.case = TRUE)
+      n <- as.integer(sub("BC$", "", text, ignore.case = TRUE))
       # This override bypasses linear_labels_parse()'s default method, so
       # (unlike a linear_labels() scheme) it must undo the epoch shift
       # chronon_parts() applies for display itself -- see

@@ -235,9 +235,11 @@ directed_reachable <- function(from, to, start, end) {
 
 # TRUE if `chronon` nests within `granule` (no `chronon` block ever splits
 # across a `granule` boundary). Defers to the exact ratio check when a fixed
-# path connects the classes; over an irregular-only path, only `n = 1` is
-# provably safe (per-`at` divisibility isn't exhaustively checkable), so
-# `n > 1` errors instead of guessing.
+# path connects the classes; over an irregular-only path, `n = 1` always
+# nests, and `n > 1` nests when it nests within a single unit of an
+# intermediate granule that nests within `granule` (30 minutes nest within
+# days, which nest within months). Otherwise per-`at` divisibility isn't
+# exhaustively checkable, so it errors instead of guessing.
 chronon_nests_in <- function(chronon, granule) {
   if (S7_class_id(chronon) == S7_class_id(granule)) {
     return(chronon_nests_in_same_unit(chronon, granule))
@@ -250,6 +252,12 @@ chronon_nests_in <- function(chronon, granule) {
     return(FALSE)
   }
   if (chronon@n != 1L) {
+    path <- chronon_longest_path(chronon, granule)
+    for (via in path[-c(1L, length(path))]) {
+      if (chronon_nests_in_fixed(chronon, via) && chronon_nests_in(via, granule)) {
+        return(TRUE)
+      }
+    }
     cli::cli_abort(
       c(
         "Cannot determine whether {time_granule_label(chronon)} nest within {time_granule_label(granule)}.",
@@ -309,6 +317,24 @@ chronon_nests_in_fixed <- function(chronon, granule) {
   chronon_nests_in_fixed_ratio(chronon, granule)
 }
 
+# Whether `n` units of `unit` are always a whole number of `chronon`s (14 days
+# are 2 weeks, but 11 days aren't), using only fixed cardinalities. A change of
+# UTC offset is ignored (a day in a time zone counts as 24 hours).
+chronon_fixed_multiple <- function(chronon, unit, n) {
+  ratio <- if (S7_class_id(chronon) == S7_class_id(unit)) {
+    unit@n / chronon@n
+  } else if (
+    chronon_fixed_reachable(chronon, unit) ||
+      chronon_fixed_reachable(unit, chronon)
+  ) {
+    chronon_cardinality(chronon, unit)
+  } else {
+    return((n == 0) %in% c(TRUE, NA))
+  }
+  k <- round_ulp(n * ratio)
+  (k == round(k)) %in% c(TRUE, NA)
+}
+
 S7_class_id <- function(x) {
   if (inherits(x, "S7_object") && !inherits(x, "S7_class")) {
     # An S7 object's class attribute already begins with its class id, so an
@@ -335,7 +361,8 @@ bfs_shortest_path <- function(
   to = integer(),
   start = integer(),
   end = integer(),
-  directed = FALSE
+  directed = FALSE,
+  exclude = integer()
 ) {
   # Input validation
   if (length(from) != length(to)) {
@@ -355,6 +382,7 @@ bfs_shortest_path <- function(
   to <- as.integer(to)
   start <- as.integer(start)
   end <- as.integer(end)
+  exclude <- as.integer(exclude %||% integer())
 
   # If start equals end, return just the start vertex
   if (start == end) {
@@ -385,6 +413,11 @@ bfs_shortest_path <- function(
 
   visited <- logical(n)
   parent <- integer(n)
+  # Excluded nodes are pre-marked visited so they're never added to the
+  # frontier (and never appear in the reconstructed path), except `start`
+  # itself always remains usable as the path's origin.
+  exclude <- exclude[exclude >= 1L & exclude <= n & exclude != start]
+  visited[exclude] <- TRUE
   visited[[start]] <- TRUE
   frontier <- start
 
@@ -548,13 +581,15 @@ S7_graph_dispatch_multi <- function(
     vec_match(vapply(group, S7_class_id, character(1L)), chr_classes)
   })
 
-  int_tree <- steiner_tree_paths(
+  steiner <- steiner_tree_paths(
     from = graph$edge_from,
     to = graph$edge_to,
     start = int_start,
     terminals = int_terminals,
     groups = int_groups
   )
+  int_tree <- steiner$tree
+  failed_groups <- steiner$failed_groups
 
   # Nodes are conversion waypoints rather than the granules asked for, so each
   # resolves to the finest granule of its time unit: `start` for the unit the
@@ -599,11 +634,17 @@ S7_graph_dispatch_multi <- function(
       children = lapply(node$children, resolve_tree)
     )
   }
-  resolve_tree(int_tree)
+  list(tree = resolve_tree(int_tree), failed_groups = failed_groups)
 }
 
-# Returns a nested list: list(node = int, children = list(...))
-# Groups are inserted first (chained BFS ensuring co-occurrence on one path).
+# Returns list(tree = list(node = int, children = list(...)), failed_groups =
+# <integer indices into `groups`>). Groups are inserted first (chained BFS
+# ensuring co-occurrence on one path); any group whose members cannot be
+# co-located on a single path (group_path() found no route, or the group was
+# a lone node identical to `start`) is *not* inserted, and its index is
+# reported in `failed_groups` so the caller can treat its targets as
+# genuinely unreachable rather than silently matching an unrelated
+# occurrence of the same class elsewhere in the tree.
 # Terminals are only inserted if not already present in the tree.
 steiner_tree_paths <- function(
   from = integer(),
@@ -613,13 +654,13 @@ steiner_tree_paths <- function(
   groups = list()
 ) {
   if (length(from) != length(to)) {
-    return(list())
+    return(list(tree = list(), failed_groups = seq_along(groups)))
   }
   if (length(start) != 1L) {
-    return(list())
+    return(list(tree = list(), failed_groups = seq_along(groups)))
   }
   if (length(from) == 0L) {
-    return(list())
+    return(list(tree = list(), failed_groups = seq_along(groups)))
   }
 
   # Collect all nodes currently present in the tree
@@ -650,17 +691,20 @@ steiner_tree_paths <- function(
 
     waypoints <- c(start, ordered_group)
     path <- integer(0)
+    used <- integer(0)
     for (i in seq_len(length(waypoints) - 1L)) {
       segment <- bfs_shortest_path(
         from = from,
         to = to,
         start = waypoints[[i]],
-        end = waypoints[[i + 1L]]
+        end = waypoints[[i + 1L]],
+        exclude = setdiff(used, waypoints[[i]])
       )
       if (length(segment) == 0L) {
         return(integer(0))
       }
       path <- c(path, if (i == 1L) segment else segment[-1L])
+      used <- c(used, segment)
     }
     path
   }
@@ -695,10 +739,13 @@ steiner_tree_paths <- function(
   tree <- list(node = start, children = list())
 
   # 1. Insert group paths first (enforce co-occurrence)
-  for (group in groups) {
-    path <- group_path(group)
+  failed_groups <- integer(0)
+  for (i in seq_along(groups)) {
+    path <- group_path(groups[[i]])
     if (length(path) > 1L) {
       tree <- insert_path(tree, path[-1L])
+    } else {
+      failed_groups <- c(failed_groups, i)
     }
   }
 
@@ -717,7 +764,7 @@ steiner_tree_paths <- function(
     }
   }
 
-  tree
+  list(tree = tree, failed_groups = failed_groups)
 }
 
 S7_graph_glb <- function(graph, chronons) {
@@ -741,6 +788,42 @@ S7_graph_glb <- function(graph, chronons) {
 
   # Return glb
   graph$classes[[int_glb]]
+}
+
+S7_graph_lub <- function(graph, chronons) {
+  int_chronons <- vec_match(
+    vapply(chronons, S7_class_id, character(1L)),
+    graph$chr_classes
+  )
+
+  int_lub <- least_upper_bound(
+    from = graph$edge_from,
+    to = graph$edge_to,
+    nodes = int_chronons
+  )
+
+  if (rlang::is_empty(int_lub)) {
+    stop(
+      "One or more of the provided chronons do not share a common coarser chronon.",
+      call. = FALSE
+    )
+  }
+
+  # Return lub
+  graph$classes[[int_lub]]
+}
+
+# Finds the least upper bound that contains all `nodes` in a graph defined by
+# directed edges from `from` to `to`. This is the dual of
+# `greatest_lower_bound()`: reversing the edge direction turns "closest common
+# ancestor" (finer chronons feeding up into `nodes`) into "closest common
+# descendant" (coarser chronons that `nodes` feed up into).
+least_upper_bound <- function(
+  from = integer(),
+  to = integer(),
+  nodes = integer()
+) {
+  greatest_lower_bound(from = to, to = from, nodes = nodes)
 }
 
 # Finds the greatest lower bound that contains all `nodes` in a graph defined by

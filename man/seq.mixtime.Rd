@@ -2,6 +2,7 @@
 % Please edit documentation in R/sequence.R
 \name{seq.mixtime::mixtime}
 \alias{seq.mixtime::mixtime}
+\alias{seq.mixtime}
 \alias{seq.mixtime::mt_time}
 \title{Generate sequences of mixtime values}
 \usage{
@@ -13,7 +14,7 @@
   by,
   length.out = NULL,
   along.with = NULL,
-  on_invalid = c("nearest", "overflow"),
+  on_invalid = getOption("mixtime.on_invalid", "clamp"),
   ...
 )
 }
@@ -38,23 +39,41 @@
 
 \item{along.with}{Take the length from this argument (alternative to \code{length.out}).}
 
-\item{on_invalid}{How to handle time points that overflow the cycle when
-using a \code{by} argument with different time granule than the sequence chronon.
-Options are:
+\item{on_invalid}{How to handle time points that don't exist, either
+because they overflow the cycle when using a \code{by} argument with different
+time granule than the sequence chronon, or because they fall in the local
+time skipped when daylight saving starts. Defaults to the
+\code{mixtime.on_invalid} option, or \code{"clamp"} if it isn't set. Options are:
 \itemize{
-\item \code{"nearest"} (default): Adjust overflowing time points to the nearest
-valid time point within the cycle
-\item \code{"overflow"}: Allow time points to overflow into the next cycle
+\item \code{"clamp"}: Reduce the overflowing component to its last valid
+value, preserving finer components (e.g., the time of day). A skipped
+local time moves back by the size of the gap (02:30 becomes 01:30)
+\item \code{"previous"}: Use the end of the cycle, so finer components are not
+preserved. For discrete time this is the last chronon within the cycle;
+for continuous time it is the end of that chronon, the same instant as
+\code{"next"}. A skipped local time becomes the end of the valid time before
+the gap (01:59:59)
+\item \code{"next"}: Use the start of the following cycle, so finer components are
+not preserved. A skipped local time becomes the start of the valid time
+after the gap (03:00)
+\item \code{"overflow"}: Allow time points to overflow into the next cycle. A
+skipped local time moves forward by the size of the gap (02:30 becomes
+03:30)
+\item \code{"reject"}: Return \code{NA} with a warning
+\item \code{"error"}: Throw an error
 }
 
 This is relevant when the starting time point has an offset that doesn't
 exist in all cycles. For example, starting on day 31 with \code{by = "1 month"}
 will overflow in months with fewer than 31 days (e.g., February). With
-\code{"nearest"}, these will be adjusted to the last day of the month (e.g.,
-Feb 28/29). With \code{"overflow"}, the extra days carry into the next month.
+\code{"clamp"}, these will be adjusted to the last day of the month (e.g.,
+Feb 28/29). With \code{"next"}, they move to the first day of the next month,
+and with \code{"overflow"}, the extra days carry into the next month.
 
-If not explicitly specified and overflow occurs, a warning is issued with
-the default \code{"nearest"} behavior applied.}
+If neither \code{on_invalid} nor the \code{mixtime.on_invalid} option is set and
+overflow occurs, a warning is issued with the default \code{"clamp"} behavior
+applied. See \code{\link[=time_shift]{time_shift()}} for shifting
+time points with the same options.}
 }
 \value{
 A mixtime vector containing the sequence.
@@ -68,6 +87,11 @@ month of year).
 For linear time types (Date, POSIXct, yearmonth, etc.), sequences progress
 forward or backward in time. For cyclical time types (month_of_year,
 day_of_week, etc.), sequences wrap around cyclically.
+
+Each time point is \code{from} (or \code{to}, if \code{from} is missing) shifted by a whole
+number of \code{by} steps, matching \code{from + duration(k, by)}. For time-zone-aware times, steps of a day or
+longer keep the local clock time, while shorter steps (e.g. hours) are real
+time across daylight saving changes.
 }
 \examples{
 # Linear time sequences with integer by
@@ -85,8 +109,9 @@ seq(date("2020-01-01"), length.out = 5, by = cal_gregorian$year(1L))
 seq(date("2020-01-01"), date("2020-01-31"), by = cal_gregorian$day(7L))
 
 # Handling invalid dates with on_invalid
-seq(date("2020-01-31"), length.out = 3, by = "1 month")  # warns, uses nearest
-seq(date("2020-01-31"), length.out = 3, by = "1 month", on_invalid = "nearest")
+seq(date("2020-01-31"), length.out = 3, by = "1 month")  # warns, uses clamp
+seq(date("2020-01-31"), length.out = 3, by = "1 month", on_invalid = "clamp")
+seq(date("2020-01-31"), length.out = 3, by = "1 month", on_invalid = "next")
 seq(date("2020-01-31"), length.out = 3, by = "1 month", on_invalid = "overflow")
 
 # Cyclical time sequences

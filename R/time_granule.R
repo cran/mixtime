@@ -49,6 +49,42 @@ granule_inherit_shared_props <- function(x, parents) {
   granule_inherit_props(x, shared)
 }
 
+# Are `x` and `y` the exact same chronon - same class and same property
+# values? Used to detect a pure identity conversion in
+# chronon_convert_impl(). `identical()` alone is too strict for this: S7's
+# `class_numeric` doesn't normalise storage mode, so a numeric property (e.g.
+# `n`) can be an integer on one side and a double on the other even when the
+# chronons are otherwise the same - `identical()` would then treat two
+# genuinely identical chronons as different.
+granule_identical <- function(x, y) {
+  if (!identical(S7_class_id(x), S7_class_id(y))) {
+    return(FALSE)
+  }
+  props_equal(props(x), props(y))
+}
+
+# Are the named property lists `x` and `y` the same, treating integer and
+# double values as equal? Classes are kept, so a naive property (mt_naive)
+# differs from an explicit one with the same value unless both are numeric.
+props_equal <- function(x, y) {
+  if (!identical(names(x), names(y))) {
+    return(FALSE)
+  }
+  for (nm in names(x)) {
+    a <- x[[nm]]
+    b <- y[[nm]]
+    same <- if (is.numeric(a) && is.numeric(b)) {
+      identical(as.double(a), as.double(b))
+    } else {
+      identical(a, b)
+    }
+    if (!isTRUE(same)) {
+      return(FALSE)
+    }
+  }
+  TRUE
+}
+
 # Convert a chronon's *default*-naive properties (the classed `mt_naive`
 # sentinel, e.g. an unset `tz`) into an explicit NA of the same underlying
 # type (e.g. `datetime(x, tz = NA)`'s naive result)

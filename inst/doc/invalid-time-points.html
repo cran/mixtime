@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+
+
+<title>Resolving invalid time points</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+span.underline{text-decoration: underline;}
+div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+</style>
+
+
+
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">Resolving invalid time points</h1>
+
+
+
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(mixtime)</span></code></pre></div>
+<p>Some temporal operations produce time points that don’t exist. Adding
+one month to 31 January asks for 31 February, and adding one day to
+02:30 on the day before daylight saving starts could produce a local
+time in the transition that the clocks skip. There is no single correct
+answer to these operations, so mixtime resolves them with one of several
+strategies you can choose. This vignette describes where invalid time
+points come from, the strategies available, and what each of them
+preserves.</p>
+<div id="how-invalid-time-points-arise" class="section level2">
+<h2>How invalid time points arise</h2>
+<div id="irregular-cardinality" class="section level3">
+<h3>Irregular cardinality</h3>
+<p>Calendar arithmetic shifts a time point by decomposing it into
+calendar components, shifting the component that matches the duration,
+and recomposing the result. Adding one month to
+<code>2021-01-31 09:30:00</code> decomposes it into the month (January
+2021), and finer components (day of the month 31 at time of day 09:30),
+then increments the month to February 2021 producing the invalid time
+point of <code>2021-02-31 09:30:00</code>.</p>
+<p>Recomposing only fails when a component’s valid range depends on the
+components around it. There are always 24 hours in a day and 60 minutes
+in an hour, so shifting by hours or minutes never produces an invalid
+time of day. These granularities have a <em>regular cardinality</em>.
+The number of days in a month varies from 28 to 31, so the day of the
+month has an <em>irregular cardinality</em> with respect to months, and
+day 31 is invalid in February.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="co"># Valid: day 15 exists in every month</span></span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a><span class="fu">date</span>(<span class="st">&quot;2021-01-15&quot;</span>) <span class="sc">+</span> <span class="fu">months</span>(<span class="dv">1</span><span class="dt">L</span>)</span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a><span class="co">#&gt; [1] 2021-02-15</span></span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a><span class="co"># Invalid: February 2021 has no day 31</span></span>
+<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a><span class="fu">datetime</span>(<span class="st">&quot;2021-01-31 09:30:00&quot;</span>) <span class="sc">+</span> <span class="fu">months</span>(<span class="dv">1</span><span class="dt">L</span>)</span>
+<span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a><span class="co">#&gt; [1] 2021-02-28 09:30:00</span></span></code></pre></div>
+<p>Only the invalid component needs resolving. In the example above, the
+month and the time of day are both still valid, and only the day of the
+month is out of range.</p>
+<p>The same problem arises wherever one granularity doesn’t fit a whole
+number of times into another, such as leap days within years, or the
+53rd week of a long ISO week year.</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="co"># 2025 has no 29 February</span></span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a><span class="fu">date</span>(<span class="st">&quot;2024-02-29&quot;</span>) <span class="sc">+</span> <span class="fu">years</span>(<span class="dv">1</span><span class="dt">L</span>)</span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a><span class="co">#&gt; [1] 2025-02-28</span></span>
+<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a></span>
+<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a><span class="co"># The ISO week year 2021 has no 53rd week</span></span>
+<span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a><span class="fu">time_shift</span>(<span class="fu">yearweek</span>(<span class="st">&quot;2020 W53&quot;</span>), <span class="fu">years</span>(<span class="dv">1</span><span class="dt">L</span>, <span class="at">calendar =</span> cal_isoweek))</span>
+<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb3-9"><a href="#cb3-9" tabindex="-1"></a><span class="co">#&gt; [1] 2021 W52</span></span></code></pre></div>
+</div>
+<div id="daylight-saving-time" class="section level3">
+<h3>Daylight saving time</h3>
+<p>Shifting a time zone aware time point by days or longer keeps its
+local clock time: one day after 09:00 is 09:00 the next day, even if the
+day is only 23 hours long. When daylight saving starts, the clocks skip
+part of the day, and a local time in that gap doesn’t exist.</p>
+<p>In Melbourne, the clocks went forward from 02:00 to 03:00 on 5
+October 2025, so 02:30 that day never happened.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>x <span class="ot">&lt;-</span> <span class="fu">datetime</span>(<span class="st">&quot;2025-10-04 02:30:00&quot;</span>, <span class="at">tz =</span> <span class="st">&quot;Australia/Melbourne&quot;</span>)</span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>x <span class="sc">+</span> <span class="fu">days</span>(<span class="dv">1</span><span class="dt">L</span>)</span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a><span class="co">#&gt; [1] 2025-10-05 01:30:00 AEST</span></span></code></pre></div>
+<p>Shifting by hours, minutes or seconds adds elapsed time instead, so
+it never lands in a gap. Twenty-four hours after 02:30 is 03:30, since
+one hour was skipped.</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>x <span class="sc">+</span> <span class="fu">hours</span>(<span class="dv">24</span><span class="dt">L</span>)</span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a><span class="co">#&gt; [1] 2025-10-05 03:30:00 AEDT</span></span></code></pre></div>
+<p>When daylight saving ends, the clocks repeat part of the day, and a
+local time in the overlap happens twice. Such a time is
+<em>ambiguous</em> rather than invalid, and mixtime resolves it to its
+earliest occurrence (equivalent to 24 hours for day increments).</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="fu">datetime</span>(<span class="st">&quot;2025-04-05 02:30:00&quot;</span>, <span class="at">tz =</span> <span class="st">&quot;Australia/Melbourne&quot;</span>) <span class="sc">+</span> <span class="fu">days</span>(<span class="dv">1</span><span class="dt">L</span>)</span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a><span class="co">#&gt; [1] 2025-04-06 02:30:00 AEDT</span></span></code></pre></div>
+</div>
+<div id="parsing" class="section level3">
+<h3>Parsing</h3>
+<p>Text describing a time point that doesn’t exist fails to parse, and
+becomes <code>NA</code> with a warning. This includes dates that don’t
+exist in the calendar, and local times skipped in the time zone.</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="fu">date</span>(<span class="st">&quot;2026-02-30&quot;</span>)</span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a><span class="co">#&gt; Warning: 1 value failed to parse and was set to `NA`.</span></span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a><span class="co">#&gt; ✖ &quot;2026-02-30&quot;</span></span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a><span class="co">#&gt; [1] NA</span></span>
+<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a><span class="fu">datetime</span>(<span class="st">&quot;2025-10-05 02:30:00&quot;</span>, <span class="at">tz =</span> <span class="st">&quot;Australia/Melbourne&quot;</span>)</span>
+<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a><span class="co">#&gt; Warning: 1 value does not exist in time zone &quot;Australia/Melbourne&quot; and was set to `NA`.</span></span>
+<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a><span class="co">#&gt; ℹ It falls in local time skipped by a time zone change (e.g. when daylight</span></span>
+<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a><span class="co">#&gt;   saving starts).</span></span>
+<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a><span class="co">#&gt; [1] NA</span></span></code></pre></div>
+<p>The rest of this vignette describes resolving invalid results from
+operations, which is controlled with the <code>on_invalid</code>
+argument.</p>
+</div>
+</div>
+<div id="resolution-strategies" class="section level2">
+<h2>Resolution strategies</h2>
+<p><code>time_shift()</code> and <code>seq()</code> resolve invalid time
+points with their <code>on_invalid</code> argument. The table below
+shows each strategy applied to the invalid
+<code>2021-02-31 09:30:00</code>, from adding one month to
+<code>2021-01-31 09:30:00</code>. Each strategy keeps a different aspect
+of the intended result, at the expense of others.</p>
+<table>
+<colgroup>
+<col width="25%" />
+<col width="25%" />
+<col width="25%" />
+<col width="25%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th><code>on_invalid</code></th>
+<th>Result</th>
+<th>Preserves</th>
+<th>Sacrifices</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>&quot;clamp&quot;</code> (default)</td>
+<td><code>2021-02-28 09:30:00</code></td>
+<td>target month; finer components</td>
+<td>target distance; order</td>
+</tr>
+<tr class="even">
+<td><code>&quot;previous&quot;</code></td>
+<td><code>2021-02-28 23:59:59</code></td>
+<td>target month; order</td>
+<td>finer components</td>
+</tr>
+<tr class="odd">
+<td><code>&quot;next&quot;</code></td>
+<td><code>2021-03-01 00:00:00</code></td>
+<td>order</td>
+<td>target month; finer components</td>
+</tr>
+<tr class="even">
+<td><code>&quot;overflow&quot;</code></td>
+<td><code>2021-03-03 09:30:00</code></td>
+<td>offset from the start of the target month; finer components</td>
+<td>target month; order</td>
+</tr>
+<tr class="odd">
+<td><code>&quot;reject&quot;</code></td>
+<td><code>NA</code> with a warning</td>
+<td>every invariant, by producing no result</td>
+<td>a result</td>
+</tr>
+<tr class="even">
+<td><code>&quot;error&quot;</code></td>
+<td>an error</td>
+<td>every invariant, by producing no result</td>
+<td>a result</td>
+</tr>
+</tbody>
+</table>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a>x <span class="ot">&lt;-</span> <span class="fu">datetime</span>(<span class="st">&quot;2021-01-31 09:30:00&quot;</span>)</span></code></pre></div>
+<div id="clamp" class="section level3">
+<h3>Clamp</h3>
+<p><code>&quot;clamp&quot;</code> reduces the invalid component to the last value
+in its valid range, leaving the other components unchanged. The day of
+the month becomes 28, and the time of day stays at 09:30. This is the
+default, and what most people expect from adding months.</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a><span class="fu">time_shift</span>(x, <span class="fu">months</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="at">on_invalid =</span> <span class="st">&quot;clamp&quot;</span>)</span>
+<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a><span class="co">#&gt; [1] 2021-02-28 09:30:00</span></span></code></pre></div>
+</div>
+<div id="previous-and-next" class="section level3">
+<h3>Previous and next</h3>
+<p><code>&quot;previous&quot;</code> and <code>&quot;next&quot;</code> resolve to the valid
+time points either side of the invalid one. <code>&quot;previous&quot;</code>
+gives the last time point in the target month, and <code>&quot;next&quot;</code>
+gives the first time point in the month after it. Neither keeps the time
+of day, since the result is at a boundary of the target month.</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a><span class="fu">time_shift</span>(x, <span class="fu">months</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="at">on_invalid =</span> <span class="st">&quot;previous&quot;</span>)</span>
+<span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb10-3"><a href="#cb10-3" tabindex="-1"></a><span class="co">#&gt; [1] 2021-02-28 23:59:59</span></span>
+<span id="cb10-4"><a href="#cb10-4" tabindex="-1"></a><span class="fu">time_shift</span>(x, <span class="fu">months</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="at">on_invalid =</span> <span class="st">&quot;next&quot;</span>)</span>
+<span id="cb10-5"><a href="#cb10-5" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb10-6"><a href="#cb10-6" tabindex="-1"></a><span class="co">#&gt; [1] 2021-03-01 00:00:00</span></span></code></pre></div>
+<p>For dates, <code>&quot;previous&quot;</code> gives the same result as
+<code>&quot;clamp&quot;</code>, since there are no finer components to keep.
+<code>&quot;next&quot;</code> gives the first day of the following month.</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a><span class="fu">time_shift</span>(<span class="fu">date</span>(<span class="st">&quot;2021-01-31&quot;</span>), <span class="fu">months</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="at">on_invalid =</span> <span class="st">&quot;previous&quot;</span>)</span>
+<span id="cb11-2"><a href="#cb11-2" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb11-3"><a href="#cb11-3" tabindex="-1"></a><span class="co">#&gt; [1] 2021-02-28</span></span>
+<span id="cb11-4"><a href="#cb11-4" tabindex="-1"></a><span class="fu">time_shift</span>(<span class="fu">date</span>(<span class="st">&quot;2021-01-31&quot;</span>), <span class="fu">months</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="at">on_invalid =</span> <span class="st">&quot;next&quot;</span>)</span>
+<span id="cb11-5"><a href="#cb11-5" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb11-6"><a href="#cb11-6" tabindex="-1"></a><span class="co">#&gt; [1] 2021-03-01</span></span></code></pre></div>
+<p>The last time point in February depends on the time point’s chronon.
+For discrete time it is the last chronon in the month (the second
+starting at 23:59:59 above). Continuous time has no last instant before
+March, so <code>&quot;previous&quot;</code> gives the end of February, which is
+the same instant as the start of March given by <code>&quot;next&quot;</code>.</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a>xc <span class="ot">&lt;-</span> <span class="fu">datetime</span>(<span class="st">&quot;2021-01-31 09:30:00&quot;</span>, <span class="at">discrete =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb12-2"><a href="#cb12-2" tabindex="-1"></a><span class="fu">time_shift</span>(xc, <span class="fu">months</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="at">on_invalid =</span> <span class="st">&quot;previous&quot;</span>) <span class="sc">==</span></span>
+<span id="cb12-3"><a href="#cb12-3" tabindex="-1"></a>  <span class="fu">time_shift</span>(xc, <span class="fu">months</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="at">on_invalid =</span> <span class="st">&quot;next&quot;</span>)</span>
+<span id="cb12-4"><a href="#cb12-4" tabindex="-1"></a><span class="co">#&gt; [1] TRUE</span></span></code></pre></div>
+</div>
+<div id="overflow" class="section level3">
+<h3>Overflow</h3>
+<p><code>&quot;overflow&quot;</code> lets the invalid component carry into the
+following month. 31 February is three days past the end of February
+2021, so it becomes 3 March, keeping the time of day.</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a><span class="fu">time_shift</span>(x, <span class="fu">months</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="at">on_invalid =</span> <span class="st">&quot;overflow&quot;</span>)</span>
+<span id="cb13-2"><a href="#cb13-2" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb13-3"><a href="#cb13-3" tabindex="-1"></a><span class="co">#&gt; [1] 2021-03-03 09:30:00</span></span></code></pre></div>
+</div>
+<div id="reject-and-error" class="section level3">
+<h3>Reject and error</h3>
+<p><code>&quot;reject&quot;</code> and <code>&quot;error&quot;</code> refuse to resolve
+invalid time points, since the operation doesn’t have a single correct
+answer. <code>&quot;reject&quot;</code> replaces them with <code>NA</code> and
+warns, while <code>&quot;error&quot;</code> stops with an error that gives their
+positions.</p>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a><span class="fu">time_shift</span>(x, <span class="fu">months</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="at">on_invalid =</span> <span class="st">&quot;reject&quot;</span>)</span>
+<span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a><span class="co">#&gt; Warning: 1 time point did not exist in the target granule and was replaced with &quot;NA&quot;.</span></span>
+<span id="cb14-3"><a href="#cb14-3" tabindex="-1"></a><span class="co">#&gt; ℹ Set `on_invalid` to &quot;clamp&quot;, &quot;previous&quot;, &quot;next&quot;, or &quot;overflow&quot; to resolve</span></span>
+<span id="cb14-4"><a href="#cb14-4" tabindex="-1"></a><span class="co">#&gt;   them to valid time points instead.</span></span>
+<span id="cb14-5"><a href="#cb14-5" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb14-6"><a href="#cb14-6" tabindex="-1"></a><span class="co">#&gt; [1] NA</span></span></code></pre></div>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a><span class="fu">time_shift</span>(x, <span class="fu">months</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="at">on_invalid =</span> <span class="st">&quot;error&quot;</span>)</span>
+<span id="cb15-2"><a href="#cb15-2" tabindex="-1"></a><span class="co">#&gt; Error:</span></span>
+<span id="cb15-3"><a href="#cb15-3" tabindex="-1"></a><span class="co">#&gt; ! 1 time point did not exist in the target granule, at position 1.</span></span>
+<span id="cb15-4"><a href="#cb15-4" tabindex="-1"></a><span class="co">#&gt; ℹ Set `on_invalid` to &quot;clamp&quot;, &quot;previous&quot;, &quot;next&quot;, or &quot;overflow&quot; to resolve</span></span>
+<span id="cb15-5"><a href="#cb15-5" tabindex="-1"></a><span class="co">#&gt;   them to valid time points instead.</span></span></code></pre></div>
+</div>
+<div id="daylight-saving-time-1" class="section level3">
+<h3>Daylight saving time</h3>
+<p>The same strategies resolve local times skipped by daylight saving.
+The gap is treated like the end of February: <code>&quot;clamp&quot;</code> moves
+back by the size of the gap, <code>&quot;previous&quot;</code> and
+<code>&quot;next&quot;</code> give the times either side of it, and
+<code>&quot;overflow&quot;</code> moves forward by the size of the gap.</p>
+<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" tabindex="-1"></a>x <span class="ot">&lt;-</span> <span class="fu">datetime</span>(<span class="st">&quot;2025-10-04 02:30:00&quot;</span>, <span class="at">tz =</span> <span class="st">&quot;Australia/Melbourne&quot;</span>)</span>
+<span id="cb16-2"><a href="#cb16-2" tabindex="-1"></a><span class="fu">time_shift</span>(x, <span class="fu">days</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="at">on_invalid =</span> <span class="st">&quot;clamp&quot;</span>)</span>
+<span id="cb16-3"><a href="#cb16-3" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb16-4"><a href="#cb16-4" tabindex="-1"></a><span class="co">#&gt; [1] 2025-10-05 01:30:00 AEST</span></span>
+<span id="cb16-5"><a href="#cb16-5" tabindex="-1"></a><span class="fu">time_shift</span>(x, <span class="fu">days</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="at">on_invalid =</span> <span class="st">&quot;previous&quot;</span>)</span>
+<span id="cb16-6"><a href="#cb16-6" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb16-7"><a href="#cb16-7" tabindex="-1"></a><span class="co">#&gt; [1] 2025-10-05 01:59:59 AEST</span></span>
+<span id="cb16-8"><a href="#cb16-8" tabindex="-1"></a><span class="fu">time_shift</span>(x, <span class="fu">days</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="at">on_invalid =</span> <span class="st">&quot;next&quot;</span>)</span>
+<span id="cb16-9"><a href="#cb16-9" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb16-10"><a href="#cb16-10" tabindex="-1"></a><span class="co">#&gt; [1] 2025-10-05 03:00:00 AEDT</span></span>
+<span id="cb16-11"><a href="#cb16-11" tabindex="-1"></a><span class="fu">time_shift</span>(x, <span class="fu">days</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="at">on_invalid =</span> <span class="st">&quot;overflow&quot;</span>)</span>
+<span id="cb16-12"><a href="#cb16-12" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb16-13"><a href="#cb16-13" tabindex="-1"></a><span class="co">#&gt; [1] 2025-10-05 03:30:00 AEDT</span></span></code></pre></div>
+</div>
+</div>
+<div id="sequences" class="section level2">
+<h2>Sequences</h2>
+<p><code>seq()</code> takes the same <code>on_invalid</code> argument.
+Each time point in the sequence is shifted from the start, rather than
+from the previous time point, so a time point clamped in February
+doesn’t affect the rest of the sequence.</p>
+<p>Since a sequence can resolve many time points at once,
+<code>seq()</code> warns when it clamps without a strategy being
+chosen.</p>
+<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" tabindex="-1"></a><span class="fu">seq</span>(<span class="fu">date</span>(<span class="st">&quot;2021-01-31&quot;</span>), <span class="at">by =</span> <span class="st">&quot;1 month&quot;</span>, <span class="at">length.out =</span> <span class="dv">4</span>)</span>
+<span id="cb17-2"><a href="#cb17-2" tabindex="-1"></a><span class="co">#&gt; Warning: Some time points in the sequence fall past the end of a shorter month.</span></span>
+<span id="cb17-3"><a href="#cb17-3" tabindex="-1"></a><span class="co">#&gt; ! Clamping them to the last valid time point in that month, `on_invalid =</span></span>
+<span id="cb17-4"><a href="#cb17-4" tabindex="-1"></a><span class="co">#&gt;   &quot;clamp&quot;` (the default).</span></span>
+<span id="cb17-5"><a href="#cb17-5" tabindex="-1"></a><span class="co">#&gt; ℹ Specify `on_invalid`, or set the `mixtime.on_invalid` option, to suppress</span></span>
+<span id="cb17-6"><a href="#cb17-6" tabindex="-1"></a><span class="co">#&gt;   this warning.</span></span>
+<span id="cb17-7"><a href="#cb17-7" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[4]&gt;</span></span>
+<span id="cb17-8"><a href="#cb17-8" tabindex="-1"></a><span class="co">#&gt; [1] 2021-01-31 2021-02-28 2021-03-31 2021-04-30</span></span></code></pre></div>
+<p>Choosing a strategy explicitly silences the warning.</p>
+<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" tabindex="-1"></a><span class="fu">seq</span>(<span class="fu">date</span>(<span class="st">&quot;2021-01-31&quot;</span>), <span class="at">by =</span> <span class="st">&quot;1 month&quot;</span>, <span class="at">length.out =</span> <span class="dv">4</span>, <span class="at">on_invalid =</span> <span class="st">&quot;clamp&quot;</span>)</span>
+<span id="cb18-2"><a href="#cb18-2" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[4]&gt;</span></span>
+<span id="cb18-3"><a href="#cb18-3" tabindex="-1"></a><span class="co">#&gt; [1] 2021-01-31 2021-02-28 2021-03-31 2021-04-30</span></span>
+<span id="cb18-4"><a href="#cb18-4" tabindex="-1"></a><span class="fu">seq</span>(<span class="fu">date</span>(<span class="st">&quot;2021-01-31&quot;</span>), <span class="at">by =</span> <span class="st">&quot;1 month&quot;</span>, <span class="at">length.out =</span> <span class="dv">4</span>, <span class="at">on_invalid =</span> <span class="st">&quot;next&quot;</span>)</span>
+<span id="cb18-5"><a href="#cb18-5" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[4]&gt;</span></span>
+<span id="cb18-6"><a href="#cb18-6" tabindex="-1"></a><span class="co">#&gt; [1] 2021-01-31 2021-03-01 2021-03-31 2021-05-01</span></span></code></pre></div>
+</div>
+<div id="choosing-a-default" class="section level2">
+<h2>Choosing a default</h2>
+<p>The <code>+</code> and <code>-</code> operators can’t take an
+<code>on_invalid</code> argument, so they use the default strategy. The
+default is set by the <code>mixtime.on_invalid</code> option, which is
+<code>&quot;clamp&quot;</code> unless set. The option also sets the default for
+<code>time_shift()</code> and <code>seq()</code>, and setting it
+silences the warning from <code>seq()</code>.</p>
+<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" tabindex="-1"></a><span class="fu">date</span>(<span class="st">&quot;2021-01-31&quot;</span>) <span class="sc">+</span> <span class="fu">months</span>(<span class="dv">1</span><span class="dt">L</span>)</span>
+<span id="cb19-2"><a href="#cb19-2" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb19-3"><a href="#cb19-3" tabindex="-1"></a><span class="co">#&gt; [1] 2021-02-28</span></span>
+<span id="cb19-4"><a href="#cb19-4" tabindex="-1"></a></span>
+<span id="cb19-5"><a href="#cb19-5" tabindex="-1"></a><span class="fu">options</span>(<span class="at">mixtime.on_invalid =</span> <span class="st">&quot;next&quot;</span>)</span>
+<span id="cb19-6"><a href="#cb19-6" tabindex="-1"></a><span class="fu">date</span>(<span class="st">&quot;2021-01-31&quot;</span>) <span class="sc">+</span> <span class="fu">months</span>(<span class="dv">1</span><span class="dt">L</span>)</span>
+<span id="cb19-7"><a href="#cb19-7" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb19-8"><a href="#cb19-8" tabindex="-1"></a><span class="co">#&gt; [1] 2021-03-01</span></span>
+<span id="cb19-9"><a href="#cb19-9" tabindex="-1"></a><span class="fu">seq</span>(<span class="fu">date</span>(<span class="st">&quot;2021-01-31&quot;</span>), <span class="at">by =</span> <span class="st">&quot;1 month&quot;</span>, <span class="at">length.out =</span> <span class="dv">4</span>)</span>
+<span id="cb19-10"><a href="#cb19-10" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[4]&gt;</span></span>
+<span id="cb19-11"><a href="#cb19-11" tabindex="-1"></a><span class="co">#&gt; [1] 2021-01-31 2021-03-01 2021-03-31 2021-05-01</span></span></code></pre></div>
+<p>Setting the option to <code>&quot;error&quot;</code> makes any invalid time
+point stop the analysis, which can be useful for checking that no time
+points are being silently resolved.</p>
+<div class="sourceCode" id="cb20"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" tabindex="-1"></a><span class="fu">options</span>(<span class="at">mixtime.on_invalid =</span> <span class="st">&quot;error&quot;</span>)</span>
+<span id="cb20-2"><a href="#cb20-2" tabindex="-1"></a><span class="fu">date</span>(<span class="st">&quot;2021-01-31&quot;</span>) <span class="sc">+</span> <span class="fu">months</span>(<span class="dv">1</span><span class="dt">L</span>)</span>
+<span id="cb20-3"><a href="#cb20-3" tabindex="-1"></a><span class="co">#&gt; Error:</span></span>
+<span id="cb20-4"><a href="#cb20-4" tabindex="-1"></a><span class="co">#&gt; ! 1 time point did not exist in the target granule, at position 1.</span></span>
+<span id="cb20-5"><a href="#cb20-5" tabindex="-1"></a><span class="co">#&gt; ℹ Set `on_invalid` to &quot;clamp&quot;, &quot;previous&quot;, &quot;next&quot;, or &quot;overflow&quot; to resolve</span></span>
+<span id="cb20-6"><a href="#cb20-6" tabindex="-1"></a><span class="co">#&gt;   them to valid time points instead.</span></span></code></pre></div>
+</div>
+<div id="costs-of-resolving-invalid-time-points" class="section level2">
+<h2>Costs of resolving invalid time points</h2>
+<p>Every strategy that produces a result changes the behaviour of the
+arithmetic, in ways worth knowing when choosing one.</p>
+<p>Calendar arithmetic is not associative. Adding one month twice clamps
+in February, and the lost days aren’t recovered in March, whereas adding
+two months at once never passes through February.</p>
+<div class="sourceCode" id="cb21"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb21-1"><a href="#cb21-1" tabindex="-1"></a><span class="fu">date</span>(<span class="st">&quot;2021-01-31&quot;</span>) <span class="sc">+</span> <span class="fu">months</span>(<span class="dv">1</span><span class="dt">L</span>) <span class="sc">+</span> <span class="fu">months</span>(<span class="dv">1</span><span class="dt">L</span>)</span>
+<span id="cb21-2"><a href="#cb21-2" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb21-3"><a href="#cb21-3" tabindex="-1"></a><span class="co">#&gt; [1] 2021-03-28</span></span>
+<span id="cb21-4"><a href="#cb21-4" tabindex="-1"></a><span class="fu">date</span>(<span class="st">&quot;2021-01-31&quot;</span>) <span class="sc">+</span> <span class="fu">months</span>(<span class="dv">2</span><span class="dt">L</span>)</span>
+<span id="cb21-5"><a href="#cb21-5" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb21-6"><a href="#cb21-6" tabindex="-1"></a><span class="co">#&gt; [1] 2021-03-31</span></span></code></pre></div>
+<p>Nor is it reversible. Adding and subtracting one month doesn’t return
+to the starting date.</p>
+<div class="sourceCode" id="cb22"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb22-1"><a href="#cb22-1" tabindex="-1"></a><span class="fu">date</span>(<span class="st">&quot;2021-01-31&quot;</span>) <span class="sc">+</span> <span class="fu">months</span>(<span class="dv">1</span><span class="dt">L</span>) <span class="sc">-</span> <span class="fu">months</span>(<span class="dv">1</span><span class="dt">L</span>)</span>
+<span id="cb22-2"><a href="#cb22-2" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[1]&gt;</span></span>
+<span id="cb22-3"><a href="#cb22-3" tabindex="-1"></a><span class="co">#&gt; [1] 2021-01-28</span></span></code></pre></div>
+<p>Only <code>&quot;previous&quot;</code> and <code>&quot;next&quot;</code> preserve the
+order of the time points being shifted, although distinct time points
+may become equal. Clamping keeps the time of day, so a later day with an
+earlier time can end up before an earlier day with a later time.
+Overflowing carries further past the end of the month for later days, so
+31 January can overtake 1 February.</p>
+<div class="sourceCode" id="cb23"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb23-1"><a href="#cb23-1" tabindex="-1"></a>y <span class="ot">&lt;-</span> <span class="fu">datetime</span>(<span class="fu">c</span>(<span class="st">&quot;2021-01-29 23:00:00&quot;</span>, <span class="st">&quot;2021-01-31 08:00:00&quot;</span>))</span>
+<span id="cb23-2"><a href="#cb23-2" tabindex="-1"></a><span class="fu">time_shift</span>(y, <span class="fu">months</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="at">on_invalid =</span> <span class="st">&quot;clamp&quot;</span>)</span>
+<span id="cb23-3"><a href="#cb23-3" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[2]&gt;</span></span>
+<span id="cb23-4"><a href="#cb23-4" tabindex="-1"></a><span class="co">#&gt; [1] 2021-02-28 23:00:00 2021-02-28 08:00:00</span></span>
+<span id="cb23-5"><a href="#cb23-5" tabindex="-1"></a><span class="fu">time_shift</span>(y, <span class="fu">months</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="at">on_invalid =</span> <span class="st">&quot;previous&quot;</span>)</span>
+<span id="cb23-6"><a href="#cb23-6" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[2]&gt;</span></span>
+<span id="cb23-7"><a href="#cb23-7" tabindex="-1"></a><span class="co">#&gt; [1] 2021-02-28 23:59:59 2021-02-28 23:59:59</span></span>
+<span id="cb23-8"><a href="#cb23-8" tabindex="-1"></a></span>
+<span id="cb23-9"><a href="#cb23-9" tabindex="-1"></a><span class="fu">time_shift</span>(<span class="fu">date</span>(<span class="fu">c</span>(<span class="st">&quot;2021-01-31&quot;</span>, <span class="st">&quot;2021-02-01&quot;</span>)), <span class="fu">months</span>(<span class="dv">1</span><span class="dt">L</span>), <span class="at">on_invalid =</span> <span class="st">&quot;overflow&quot;</span>)</span>
+<span id="cb23-10"><a href="#cb23-10" tabindex="-1"></a><span class="co">#&gt; &lt;mixtime[2]&gt;</span></span>
+<span id="cb23-11"><a href="#cb23-11" tabindex="-1"></a><span class="co">#&gt; [1] 2021-03-03 2021-03-01</span></span></code></pre></div>
+<p>When the order of time points matters, such as when shifting the
+index of a time series, <code>&quot;previous&quot;</code> or <code>&quot;next&quot;</code>
+are safer choices than the default.</p>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

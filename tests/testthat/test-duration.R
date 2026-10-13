@@ -24,6 +24,33 @@ test_that("integer duration of 0 is plural", {
   expect_equal(format(minutes(0L)), "0 minutes")
 })
 
+test_that("durations of sized chronons show the chronon's size", {
+  h3 <- cal_gregorian$hour(3L)
+  expect_equal(format(duration(1L, h3)), "3 hours")
+  expect_equal(format(duration(1:3, h3)), c("3 hours", "6 hours", "9 hours"))
+  expect_equal(format(duration(0L, h3)), "0 hours")
+  expect_equal(format(duration(1L, cal_gregorian$month(3L))), "3 months")
+  # A double size doesn't make a discrete duration continuous
+  expect_equal(format(duration(2L, cal_gregorian$hour(3))), "6 hours")
+  # Continuous durations are scaled too
+  expect_equal(
+    format(duration(c(0.5, 1.5), h3, discrete = FALSE)),
+    c("1.5 hours", "4.5 hours")
+  )
+  # The display agrees with converting to size-1 chronons
+  expect_equal(
+    format(duration(duration(2L, h3), cal_gregorian$hour(1L))),
+    format(duration(2L, h3))
+  )
+})
+
+test_that("chronons of sized granules print with their size", {
+  x <- mixtime(as.POSIXct("2024-01-01 06:00", tz = "UTC"), chronon = cal_gregorian$hour(3L))
+  expect_equal(format(time_chronon(x)), "3 hours")
+  expect_output(str(x), "linear<3 hours>", fixed = TRUE)
+  expect_equal(format(time_chronon(mixtime(as.Date("2024-01-01")))), "1 day")
+})
+
 # ---------------------------------------------------------------------------
 # Double (fractional) durations
 # ---------------------------------------------------------------------------
@@ -172,6 +199,36 @@ test_that("calendar-dependent duration conversion errors with a duration-specifi
   expect_error(
     duration(days(60), chronon = cal_gregorian$month(1L), discrete = FALSE),
     "no anchor"
+  )
+})
+
+test_that("irregular duration conversions error instead of assuming a position", {
+  expect_error(
+    duration(duration(1L, cal_isoweek$year(1L)), cal_isoweek$week(1L)),
+    "no anchor"
+  )
+  expect_error(
+    duration(duration(1L, cal_sym454$month(1L)), cal_sym454$week(1L)),
+    "no anchor"
+  )
+  expect_error(
+    duration(duration(1L, cal_time_lunar$phase(1L)), cal_time_civil$second(1L)),
+    "no anchor"
+  )
+})
+
+test_that("discrete duration conversion counts whole granules towards zero", {
+  expect_equal(as.numeric(duration(days(-4L), cal_isoweek$week(1L), discrete = TRUE)), 0)
+  expect_equal(as.numeric(duration(days(-10L), cal_isoweek$week(1L), discrete = TRUE)), -1)
+  expect_equal(as.numeric(duration(days(10L), cal_isoweek$week(1L), discrete = TRUE)), 1)
+  expect_equal(
+    as.numeric(vctrs::vec_cast(days(-4L)@x[[1L]], weeks(1L)@x[[1L]])),
+    0
+  )
+  # Floating-point error doesn't lose a whole granule
+  expect_equal(
+    as.numeric(duration(duration(-0.3, cal_gregorian$hour(1L)), cal_gregorian$second(1L), discrete = TRUE)),
+    -1080
   )
 })
 

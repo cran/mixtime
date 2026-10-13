@@ -70,24 +70,29 @@ chronon_cardinality <- S7::new_generic("chronon_cardinality", c("x", "y"))
 #' whose relationship is a constant, context-independent number (e.g., 60
 #' seconds in a minute, 24 hours in a day). Unlike `chronon_cardinality()`,
 #' methods for this generic do not receive (and must not need) an `at` time
-#' point, and should return the number of unit (`n = 1L`) `x` granules that
-#' fit within one unit `y` granule.
+#' point. Methods should ignore the granule sizes (`n`) of `x` and `y`, and
+#' return the number of unit (`n = 1L`) `x` granules that fit within one unit
+#' `y` granule. The generic scales this by the requested granule sizes.
 #'
 #' Defining a method for `chronon_cardinality_fixed()` automatically provides
-#' a `chronon_cardinality()` method for the pair (scaled by the requested
-#' granule sizes via the `list(mt_unit, mt_unit)` fallback method), and marks
-#' the relationship as safe to use for [chronon_divmod()]'s graph traversal,
-#' where variable (context-dependent) cardinalities cannot be used since no
-#' `at` is available mid-traversal.
+#' a `chronon_cardinality()` method for the pair, and marks the relationship
+#' as safe to use for [chronon_divmod()]'s graph traversal, where variable
+#' (context-dependent) cardinalities cannot be used since no `at` is available
+#' mid-traversal.
 #'
 #' @inheritParams chronon_cardinality
 #'
-#' @return A single number describing how many unit `x` time granules fit
-#'   into a unit `y` time granule.
+#' @return A single number describing how many `x` time granules fit into a
+#'   `y` time granule.
 #'
 #' @keywords internal
 #' @export
-chronon_cardinality_fixed <- S7::new_generic("chronon_cardinality_fixed", c("x", "y"))
+chronon_cardinality_fixed <- S7::new_generic(
+  "chronon_cardinality_fixed",
+  c("x", "y"),
+  # Methods give the unit granule ratio, scaled here by the granule sizes.
+  function(x, y, ...) S7::S7_dispatch() * y@n / x@n
+)
 
 # #' @rdname chronon_cardinality
 method(chronon_cardinality, list(mt_unit, mt_unit)) <- function(x, y, at = NULL) {
@@ -96,13 +101,12 @@ method(chronon_cardinality, list(mt_unit, mt_unit)) <- function(x, y, at = NULL)
     return(y@n/x@n)
   }
 
-  # Use a registered fixed-cardinality method if available, scaling the
-  # constant (unit granule) ratio by the requested granule sizes.
+  # Use a registered fixed-cardinality method if available.
   if (!is.null(chronon_cardinality_fixed@methods[[S7_class_id(x)]][[S7_class_id(y)]])) {
-    return(chronon_cardinality_fixed(x, y) * y@n / x@n)
+    return(chronon_cardinality_fixed(x, y))
   }
   if (!is.null(chronon_cardinality_fixed@methods[[S7_class_id(y)]][[S7_class_id(x)]])) {
-    return(y@n / (chronon_cardinality_fixed(y, x) * x@n))
+    return(1 / chronon_cardinality_fixed(y, x))
   }
 
   # Try to find a method with arguments swapped
@@ -144,7 +148,7 @@ method(chronon_cardinality, list(mt_unit, mt_unit)) <- function(x, y, at = NULL)
 
 # #' @rdname chronon_cardinality_fixed
 method(chronon_cardinality_fixed, list(mt_unit, mt_unit)) <- function(x, y) {
-  # Check if x and y are the same class
+  # Same time unit: always one unit granule in another.
   if (S7_class_id(x) == S7_class_id(y)) {
     return(1)
   }
@@ -166,4 +170,18 @@ method(chronon_cardinality_fixed, list(mt_unit, mt_unit)) <- function(x, y) {
     }
   }
   result
+}
+# Irregular cardinalities depend on where in time they're measured. Without a
+# time point `at` (e.g. when converting a duration, which has no position)
+# there is nothing to measure against, so error rather than guess.
+check_cardinality_at <- function(at, x, y) {
+  if (is.null(at)) {
+    stop(
+      sprintf(
+        "The number of %s in %s requires the time context `at`.",
+        time_unit_plural(x), time_unit_plural(y)
+      ),
+      call. = FALSE
+    )
+  }
 }

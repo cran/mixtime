@@ -57,19 +57,19 @@ method(chronon_format_cyclical, list(cal_isoweek$week, cal_isoweek$year)) <- fun
 # Candidate parsing formats
 method(chronon_parse_linear, list(cal_isoweek$week, class_any)) <- function(x, cal) {
   parse_format(
-    # e.g. "2024-W01", "2024W01", "2024 w1"
-    "{lin(year)}[-\\s]*[Ww]{cyc(week,year)}",
-    # e.g. "W01-2024", "w1 2024"
-    "[Ww]{cyc(week,year)}[-\\s]+{lin(year)}",
+    # e.g. "2024-W01", "2024W01", "2024 w1", "2024 Week 1"
+    "[[:space:]]*{lin(year)}[-/,._[:space:]]*(?i:weeks?|wk|w)[-/,._[:space:]]*{cyc(week,year)}[[:space:]]*",
+    # e.g. "W01-2024", "w1 2024", "Week 1 2024"
+    "[[:space:]]*(?i:weeks?|wk|w)[-/,._[:space:]]*{cyc(week,year)}[-/,._[:space:]]+{lin(year)}[[:space:]]*",
     regex = TRUE
   )
 }
 method(chronon_parse_linear, list(cal_isoweek$day, S7::new_S3_class("cal_isoweek"))) <- function(x, cal) {
   parse_format(
     # e.g. "2024-W01-3", "2024W01 Wed", "2024 w1 Wednesday"
-    "{lin(year)}[-\\s]*[Ww]{cyc(week,year)}[-\\s]+{cyc(day,week)}",
+    "[[:space:]]*{lin(year)}[-/,._[:space:]]*(?i:weeks?|wk|w)[-/,._[:space:]]*{cyc(week,year)}[-/,._[:space:]]+{cyc(day,week)}[[:space:]]*",
     # e.g. "Wed W01-2024", "3 w1 2024"
-    "{cyc(day,week)}[-\\s]+[Ww]{cyc(week,year)}[-\\s]+{lin(year)}",
+    "[[:space:]]*{cyc(day,week)}[-/,._[:space:]]+(?i:weeks?|wk|w)[-/,._[:space:]]*{cyc(week,year)}[-/,._[:space:]]+{lin(year)}[[:space:]]*",
     regex = TRUE
   )
 }
@@ -79,13 +79,14 @@ method(chronon_parse_cyclical, list(cal_isoweek$day, cal_isoweek$week)) <- funct
 }
 method(chronon_parse_cyclical, list(cal_isoweek$week, cal_isoweek$year)) <- function(x, y) {
   parse_format(
-    # e.g. "1", "W1", "w01"
-    "[Ww]?{cyc(week,year)}",
+    # e.g. "1", "W1", "w01", "Week 1"
+    "[[:space:]]*(?:(?i:weeks?|wk|w)[-/,._[:space:]]*)?{cyc(week,year)}[[:space:]]*",
     regex = TRUE
   )
 }
 
 method(chronon_cardinality, list(cal_isoweek$week, cal_isoweek$year)) <- function(x, y, at = NULL) {
+  check_cardinality_at(at, x, y)
   if(y@n != 1L) {
     cli::cli_abort("The number of weeks in multi-year chronons is not yet supported.")
   }
@@ -93,7 +94,7 @@ method(chronon_cardinality, list(cal_isoweek$week, cal_isoweek$year)) <- functio
     cli::cli_abort("The number of multi-weeks in year chronons is not yet supported.")
   }
   year <- at + 1970L
-  p <- (year + year %/% 4 - year %/% 100 + year %/% 400) %% 7
+  p <- fmod(year + fdiv(year, 4) - fdiv(year, 100) + fdiv(year, 400), 7)
   ifelse(p == 4 | (p == 3 & is_leap_year(year)), 53L, 52L)  
 }
 
@@ -105,8 +106,8 @@ method(chronon_divmod, list(cal_isoweek$day, cal_isoweek$week)) <- function(from
   # TODO: Add week start specification (e.g., week starts on Monday vs Sunday)
   divisor <- chronon_cardinality(from, to)
   list(
-    div = (x + 3L) %/% divisor,
-    mod = (x + 3L) %% divisor
+    div = fdiv(x + 3L, divisor),
+    mod = fmod(x + 3L, divisor)
   )
 }
 
@@ -130,7 +131,7 @@ method(chronon_divmod, list(cal_isoweek$week, cal_isoweek$year)) <- function(fro
   }
 
   td   <- x * 7L
-  y    <- as.integer(td %/% 365.2425 + 1970L)
+  y    <- as.integer(fdiv(td, 365.2425) + 1970L)
   j    <- 365L * (y - 1970L) + (y - 1969L) %/% 4L - (y - 1901L) %/% 100L + (y - 1601L) %/% 400L
   leap <- ((y %% 4L == 0L) & (y %% 100L != 0L)) | (y %% 400L == 0L)
   jn   <- j + 365L + leap
@@ -148,7 +149,7 @@ method(chronon_divmod, list(cal_isoweek$week, cal_isoweek$year)) <- function(fro
     # year offset from epoch
     div = y - 1970L,  
     # 0-indexed week within ISO year [0, 51] or [0, 52]
-    mod = (td - 3L - w1) %/% 7L
+    mod = fdiv(td - 3L - w1, 7L)
   )
 }
 

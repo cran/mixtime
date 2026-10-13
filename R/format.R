@@ -111,13 +111,9 @@ time_format_impl <- function(x, format = time_format_default(x, attr = attr), ..
           }
         },
         frac = function(x) {
-          # Apply time zone offset to x, with truncation for discrete time models.
-          chronon <- attr(x, "chronon")
-          x <- vec_data(x)
-          x_tz <- tz_offset_impl(x, chronon)
-          if(is.integer(x)) x_tz <- trunc(x_tz)
-          x <- x + x_tz
-          sprintf("%.1f%%", (x - floor(x))*100)
+          # The fraction through each chronon (in its own context)
+          x <- round_ulp(vec_data(x))
+          sprintf("%.1f%%", (x - floor(x)) * 100)
         },
 
         # Attach .time for specialised usage (e.g. tz_abbreviation(.time))
@@ -242,6 +238,13 @@ S7::method(print, mt_time) <- function(x, ...) {
   cat(paste0("<", class(x)[[1L]], "[", length(x), "]>"), "\n", sep = "")
   print(format(x), quote = FALSE)
   invisible(x)
+}
+
+# A time unit as text, e.g. "1 month" or "15 minutes". Used wherever a
+# granule is displayed on its own, such as a tsibble's interval.
+#' @export
+S7::method(format, mt_unit) <- function(x, ...) {
+  time_granule_label(x, x@n)
 }
 
 #' @export

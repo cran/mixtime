@@ -186,12 +186,14 @@ method(chronon_cardinality_fixed, list(cal_time_solar$arcsecond, cal_time_solar$
 
 # Solar illumination phases
 method(chronon_cardinality, list(cal_time_solar$second, cal_time_solar$illumination)) <- function(x, y, at = NULL) {
+  check_cardinality_at(at, x, y)
   (approx_solar_seconds_from_solar_phase((at + 1L) * y@n, y@lat, y@lon, y@alt) -
      approx_solar_seconds_from_solar_phase(at * y@n, y@lat, y@lon, y@alt)) / x@n
 }
 
 # The number of UTC seconds in a solar second
 method(chronon_cardinality, list(cal_time_civil$second, cal_time_solar$second)) <- function(x, y, at = NULL) {
+  check_cardinality_at(at, x, y)
   at_ss <- approx_solar_seconds_from_utc(at, y@lat, y@lon, y@alt)
   (approx_utc_from_solar_seconds((at_ss + 1L) * y@n, y@lat, y@lon, y@alt) -
      approx_utc_from_solar_seconds(at_ss * y@n, y@lat, y@lon, y@alt)) / x@n
@@ -243,7 +245,7 @@ solar_illumination_phases <- c(
   "civil dusk", "nautical dusk", "astronomical dusk", "night"
 )
 method(linear_labels_format, cal_time_solar$illumination) <- function(granule, i, ...) {
-  solar_illumination_phases[floor((i * granule@n)%%8) + 1L]
+  solar_illumination_phases[floor(fmod(i * granule@n, 8)) + 1L]
 }
 
 # method(cyclical_labels_format, list(cal_time_solar$illumination, cal_time_solar$day)) <- function(granule, cycle, i) {
@@ -262,7 +264,7 @@ method(cyclical_labels, list(cal_time_solar$ampm, cal_time_solar$day)) <- label_
 method(cyclical_labels_format, list(cal_time_solar$hour, S7::class_any)) <- function(granule, cycle, i, at = NULL, ...) {
   if (S7_inherits(cycle, cal_time_solar$ampm)) {
     # 12 hours count with 12,1,2,...,11
-    sprintf("%02d", (i-1L)%%12L + 1L)
+    sprintf("%02d", fmod(i - 1L, 12L) + 1L)
   } else {
     # 24 hours count with 0-indexing
     sprintf("%02d", i)
@@ -283,7 +285,7 @@ method(cyclical_labels, list(cal_time_solar$minute, S7::class_any)) <- label_sch
 method(cyclical_labels, list(cal_time_solar$second, S7::class_any)) <- label_scheme(start = 0L, width = 2L)
 
 method(cyclical_labels_format, list(cal_time_solar$degree, S7::class_any)) <- function(granule, cycle, i, at = NULL, ...) {
-  sprintf("%03d", (i - 180L*chronon_cardinality(cycle, cal_time_solar$day(1L))) %% 360L)
+  sprintf("%03d", fmod(i - 180L*chronon_cardinality(cycle, cal_time_solar$day(1L)), 360L))
 }
 method(cyclical_labels_parse, list(cal_time_solar$degree, S7::class_any)) <- function(granule, cycle, ...) {
   list(

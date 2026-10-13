@@ -9,21 +9,24 @@
 #' represents:
 #'
 #' - `a == b` iff `start(a) == start(b)` and `end(a) == end(b)`
-#' - `a < b` iff `end(a) < start(b)`
-#' - `a > b` iff `start(a) > end(b)`
+#' - `a < b` iff `end(a) <= start(b)` (i.e. before with or without a gap)
+#' - `a > b` iff `start(a) >= end(b)` (i.e. after with or without a gap)
 #' - `a <= b` iff `end(a) <= end(b)` (right-bound comparison)
 #' - `a >= b` iff `start(a) >= start(b)` (left-bound comparison)
 #'
-#' This is **not** a total order: `<=`/`>=` are endpoint comparisons, not
-#' shorthand for `(< or ==)`/`(> or ==)`, so it is possible for none of
-#' `==`, `<`, `>` to hold between two values.
-#'
-#' If both operands are continuous (fractional chronons), or share an
-#' identical chronon, the comparison simplifies to a direct numeric
-#' comparison, since there is no interval to consider.
-#'
+#' This is not a total order for comparisons between time points at different
+#' granularities: `<=`/`>=` are **not** shorthand for `(< or ==)`/`(> or ==)`.
+#' For example, `yearquarter("2020 Q3") <= year("2020")` is TRUE despite 
+#' `yearquarter("2020 Q3") < year("2020")` and 
+#' `yearquarter("2020 Q3") == year("2020")` being FALSE.
+#' 
+#' The inequality operators `<`/`>` and `<=`/`>=` are useful conjugations of
+#' Allen's interval algebra for common data manipulation needs. The complete set
+#' of Allen's 13 base relations are documented in [allen-interval-algebra].
+#' 
 #' @param e1,e2 `mt_linear` vectors (or values castable to one, such as
-#'   plain numeric vectors sharing the other operand's chronon).
+#'   plain numeric vectors in the other operand's chronon, read from its epoch
+#'   as [mixtime()] reads them, so `year(x) == 2026L` compares with 2026).
 #'
 #' @return A logical vector.
 #'
@@ -39,46 +42,176 @@
 #' @name mt_linear-compare
 NULL
 
+# Express both operands as half-open intervals ([start, end)) of real chronon
+# instants in their common (finest shared) chronon, then defer to
+# `interval_relation()`. A discrete value spans a whole common-chronon unit
+# ([v, v+1)); a continuous value is a zero-width instant ([v, v)).
 linear_compare <- function(op, e1, e2) {
-  if (!S7_inherits(e1, mt_linear)) e1 <- vec_cast(e1, e2)
-  if (!S7_inherits(e2, mt_linear)) e2 <- vec_cast(e2, e1)
+  x_time <- S7_inherits(e1, mt_linear)
+  y_time <- S7_inherits(e2, mt_linear)
+  if (!x_time) e1 <- vec_cast(e1, e2)
+  if (!y_time) e2 <- vec_cast(e2, e1)
 
   x_chronon <- e1@chronon
   y_chronon <- e2@chronon
   xv <- S7_data(e1)
   yv <- S7_data(e2)
+  x_discrete <- is.integer(xv)
+  y_discrete <- is.integer(yv)
 
-  if (identical(x_chronon, y_chronon)) {
-    # Identical granules: no span to consider, compare the raw data directly
-    x_start <- x_end <- xv
-    y_start <- y_end <- yv
-  } else {
-    # Different granules: express both values as closed intervals
-    # ([start, end]) in their common (finest shared) chronon, then compare
-    # endpoints. Continuous values are zero-width intervals (start == end).
-    common <- chronon_common_impl(list(x_chronon, y_chronon))
-    x_start <- chronon_convert_impl(xv, x_chronon, common, discrete = is.integer(xv))
-    y_start <- chronon_convert_impl(yv, y_chronon, common, discrete = is.integer(yv))
-
-    x_end <- x_start
-    if (is.integer(xv)) {
-      x_end <- x_start + chronon_cardinality(common, x_chronon, at = xv) - 1
-    }
-    y_end <- y_start
-    if (is.integer(yv)) {
-      y_end <- y_start + chronon_cardinality(common, y_chronon, at = yv) - 1
-    }
+  if (x_discrete != y_discrete) {
+    warn_span_instant(
+      op,
+      if (x_discrete) yv else xv,
+      side = if (x_discrete) 2L else 1L,
+      is_time = if (x_discrete) y_time else x_time,
+      rewrap = "linear_time"
+    )
   }
 
-  switch(
-    op,
-    "==" = x_start == y_start & x_end == y_end,
-    "!=" = !(x_start == y_start & x_end == y_end),
-    "<"  = x_end < y_start,
-    ">"  = x_start > y_end,
-    "<=" = x_end <= y_end,
-    ">=" = x_start >= y_start
+  if (identical(x_chronon, y_chronon)) {
+    # No conversion needed: a shared chronon unit is always exactly 1 wide
+    x_start <- as.double(xv)
+    y_start <- as.double(yv)
+    x_end <- if (x_discrete) x_start + 1 else x_start
+    y_end <- if (y_discrete) y_start + 1 else y_start
+  } else {
+    # Convert to the common chronon before measuring each operand's width in it
+    common <- chronon_glb_impl(list(x_chronon, y_chronon))
+    x_start <- as.double(chronon_convert_impl(xv, x_chronon, common, discrete = x_discrete))
+    y_start <- as.double(chronon_convert_impl(yv, y_chronon, common, discrete = y_discrete))
+
+    x_end <- x_start
+    if (x_discrete) x_end <- x_start + chronon_cardinality(common, x_chronon, at = xv)
+    y_end <- y_start
+    if (y_discrete) y_end <- y_start + chronon_cardinality(common, y_chronon, at = yv)
+  }
+
+  interval_relation(op, list(x_start, x_end), list(y_start, y_end))
+}
+
+# A span (discrete) is never equal to an instant (continuous), and ordering
+# that measures against an instant's (zero-width) end differs from measuring
+# against the end of the span it starts (`year(2016L) > year(2016)` is TRUE).
+# When every instant sits exactly on the start of its chronon (e.g.
+# `year(2016)`), the instant was most likely meant as the span it starts, so
+# hint at the fix, rewritten from the code used for the instant's operand where
+# possible. Measures against the instant's start are unaffected, as that is
+# where the span starts too.
+warn_span_instant <- function(op, instant, side, is_time, rewrap = NULL) {
+  # `a <= b` compares both ends, `a > b` uses the end of `b` and `a < b` the end
+  # of `a`, while `a >= b` only compares starts (see `mt_linear-compare`).
+  ambiguous <- c("==", "!=", "<=", if (side == 2L) ">" else "<")
+  if (!op %in% ambiguous) return(invisible())
+  instant <- instant[!is.na(instant)]
+  if (!length(instant) || any(instant != floor(instant))) return(invisible())
+
+  # Warn once per comparison, rather than once per granularity group that
+  # vecvec compares separately within a mixed vector.
+  dispatch <- compare_dispatch_frame()
+  if (!is.null(dispatch)) {
+    if (isTRUE(get0(".mixtime_span_instant_warned", envir = dispatch$env, inherits = FALSE))) {
+      return(invisible())
+    }
+    assign(".mixtime_span_instant_warned", TRUE, envir = dispatch$env)
+  }
+
+  expr <- if (!is.null(dispatch)) compare_operand_expr(dispatch, side)
+  fix <- if (!is.null(expr)) span_operand_fix(expr, is_time, rewrap)
+  hint <- if (is.null(fix)) {
+    "To compare spans, create both from integers (e.g. {.code year(2015L)} rather than {.code year(2015)})."
+  } else {
+    "To compare spans, use {.code {deparse1(fix)}} instead of {.code {deparse1(expr)}}."
+  }
+  cli::cli_warn(
+    c(
+      if (op %in% c("==", "!=")) {
+        "Comparing time spans with instants, which are never equal."
+      } else {
+        "{.code {op}} between time spans and instants compares with the instant, not the span it starts."
+      },
+      "i" = "Discrete (integer) times span their chronon, while continuous (double) times are instants.",
+      "i" = hint
+    ),
+    class = "mixtime_warning_span_instant",
+    call = NULL
   )
+}
+
+# The outermost S3 `Ops` dispatch frame (vecvec or S7) of the comparison call
+# that was written, as `list(env, call)`; its call still holds the unevaluated
+# operands.
+compare_dispatch_frame <- function() {
+  frames <- sys.frames()
+  for (i in seq_along(frames)) {
+    generic <- get0(".Generic", envir = frames[[i]], inherits = FALSE)
+    if (is.character(generic) && generic %in% c("==", "!=", "<", "<=", ">", ">=")) {
+      return(list(env = frames[[i]], call = sys.call(i)))
+    }
+  }
+  NULL
+}
+
+# The code for operand `side` (1 or 2) of the comparison in `dispatch`. `NULL`
+# (for the general hint) unless it is code the user wrote: comparisons made
+# inside a package's code would show names local to that code, and calls built
+# by `do.call()` or `!!` hold already-evaluated objects rather than code.
+compare_operand_expr <- function(dispatch, side) {
+  call <- dispatch$call
+  if (length(call) != 3L) return(NULL)
+  # S3 dispatch records the environment the comparison was evaluated in
+  # (e.g. a data mask), which belongs to a package when its code made it
+  caller <- get0(".GenericCallEnv", envir = dispatch$env, inherits = FALSE)
+  if (is.null(caller) || isNamespace(topenv(caller))) return(NULL)
+  expr <- call[[side + 1L]]
+  if (is_plain_code(expr)) expr
+}
+
+# Whether `expr` is code (symbols, calls and bare scalar constants) rather than
+# an evaluated object injected into a call.
+is_plain_code <- function(expr) {
+  if (is.symbol(expr)) return(TRUE)
+  if (is.call(expr)) {
+    args <- as.list(expr)
+    args <- args[!vapply(args, identical, logical(1L), quote(expr = ))]
+    return(all(vapply(args, is_plain_code, logical(1L))))
+  }
+  is.atomic(expr) && length(expr) <= 1L && is.null(attributes(expr))
+}
+
+# Rewrite an instant's code into code for the span it starts:
+# * a numeric literal becomes an integer literal (`2026` -> `2026L`)
+# * a call with a numeric literal first argument has it made integer
+#   (`year(2015)` -> `year(2015L)`)
+# * a call setting `discrete` gets the general hint, as an integer first
+#   argument needn't make it discrete
+# * a plain numeric operand is truncated (`myvar` -> `as.integer(myvar)`)
+# * any other time is made discrete with `rewrap` (`linear_time(myvar)`)
+span_operand_fix <- function(expr, is_time, rewrap) {
+  if (is_double_literal(expr)) return(as_integer_literal(expr))
+  if (is.call(expr) && "discrete" %in% names(expr)) return(NULL)
+  if (is.call(expr) && length(expr) >= 2L && is_double_literal(expr[[2L]])) {
+    expr[[2L]] <- as_integer_literal(expr[[2L]])
+    return(expr)
+  }
+  if (!is_time) return(call("as.integer", expr))
+  if (!is.null(rewrap)) return(call(rewrap, expr))
+  NULL
+}
+
+is_double_literal <- function(expr) {
+  if (is.call(expr) && identical(expr[[1L]], quote(`-`)) && length(expr) == 2L) {
+    expr <- expr[[2L]]
+  }
+  is.double(expr) && length(expr) == 1L && is.finite(expr) && expr == floor(expr)
+}
+
+as_integer_literal <- function(expr) {
+  if (is.call(expr)) {
+    expr[[2L]] <- as.integer(expr[[2L]])
+    return(expr)
+  }
+  as.integer(expr)
 }
 
 method(`==`, list(mt_linear, class_any)) <- function(e1, e2) linear_compare("==", e1, e2)
@@ -143,9 +276,8 @@ duration_compare <- function(op, e1, e2) {
   yd <- S7_data(e2)
 
   if (!identical(x_chronon, y_chronon)) {
-    # Different chronons: scale both magnitudes to their finest common chronon
-    # before comparing (mirrors `duration_combine()` in arithmetic.R).
-    tu <- chronon_common_impl(list(x_chronon, y_chronon))
+    # Scale both magnitudes to their finest common chronon (mirrors `duration_combine()`)
+    tu <- chronon_glb_impl(list(x_chronon, y_chronon))
     xd <- xd * chronon_cardinality(tu, x_chronon)
     yd <- yd * chronon_cardinality(tu, y_chronon)
   }
@@ -201,7 +333,8 @@ method(`>=`, list(class_any, mt_duration)) <- function(e1, e2) duration_compare(
 #' value spans the closed interval of its chronon, so
 #'
 #' - `a == b` iff `start(a) == start(b)` and `end(a) == end(b)`
-#' - `a < b` iff `end(a) < start(b)`, `a > b` iff `start(a) > end(b)`
+#' - `a < b`/`a > b` iff `a`/`b` ends at or before the other begins (a gap, or
+#'   just adjacency - see [mt_linear-compare] for why this includes adjacency)
 #' - `a <= b` iff `end(a) <= end(b)`, `a >= b` iff `start(a) >= start(b)`
 #'
 #' As for `mt_linear`, this is not a total order when chronons differ. Ordering
@@ -209,7 +342,8 @@ method(`>=`, list(class_any, mt_duration)) <- function(e1, e2) duration_compare(
 #' is not treated as circular.
 #'
 #' @param e1,e2 `mt_cyclical` vectors sharing a cycle (or values castable to one,
-#'   such as plain numeric vectors sharing the other operand's chronon).
+#'   such as plain numeric vectors in the other operand's chronon, read from
+#'   its epoch as [mixtime()] reads them).
 #'
 #' @return A logical vector.
 #'
@@ -225,27 +359,29 @@ method(`>=`, list(class_any, mt_duration)) <- function(e1, e2) duration_compare(
 #' @name mt_cyclical-compare
 NULL
 
-# Reduce absolute chronon counts to their position within `cycle`, matching the
-# reduction format() displays: the integer position from chronon_parts(), plus
-# the fraction carried by a continuous (double) time model, which chronon_parts()
-# floors away for display but which distinguishes values here.
+# Reduce an absolute chronon count to its position within `cycle`, as format()
+# displays: the integer position from chronon_parts(), plus the fraction a
+# continuous (double) time model carries but chronon_parts() floors away.
 cyclical_position <- function(x, chronon, cycle) {
   x <- mt_cyclical(x, chronon = chronon, cycle = cycle)
   pos <- chronon_parts(x, cyclical = list(list(chronon, cycle)))$cyclical[[1L]]
   xd <- S7_data(x)
   if (is.double(xd)) {
-    xd <- xd + tz_offset_impl(xd, attr(x, "chronon"))
+    xd <- round_ulp(xd)
     pos <- pos + (xd - floor(xd))
   }
   pos
 }
 
+# As `linear_compare()`, but positions are first reduced to their place
+# within the shared cycle before forming half-open interval endpoints.
 cyclical_compare <- function(op, e1, e2) {
-  if (!S7_inherits(e1, mt_cyclical)) e1 <- vec_cast(e1, e2)
-  if (!S7_inherits(e2, mt_cyclical)) e2 <- vec_cast(e2, e1)
+  x_time <- S7_inherits(e1, mt_cyclical)
+  y_time <- S7_inherits(e2, mt_cyclical)
+  if (!x_time) e1 <- vec_cast(e1, e2)
+  if (!y_time) e2 <- vec_cast(e2, e1)
 
-  # A cycle is a modulus, not a unit: there is no common cycle to reconcile to
-  # (see `cycle_common()`), so differing cycles cannot be compared.
+  # A cycle is a modulus, not a unit, so differing cycles have no common cycle
   cycle <- cycle_common(e1@cycle, e2@cycle)
   if (is.null(cycle)) {
     vctrs::stop_incompatible_op(op, e1, e2, details = cycle_incompatible_details)
@@ -255,44 +391,44 @@ cyclical_compare <- function(op, e1, e2) {
   y_chronon <- e2@chronon
   xv <- S7_data(e1)
   yv <- S7_data(e2)
+  x_discrete <- is.integer(xv)
+  y_discrete <- is.integer(yv)
+
+  if (x_discrete != y_discrete) {
+    warn_span_instant(
+      op,
+      if (x_discrete) yv else xv,
+      side = if (x_discrete) 2L else 1L,
+      is_time = if (x_discrete) y_time else x_time
+    )
+  }
 
   if (identical(x_chronon, y_chronon)) {
-    # Identical granules: no span to consider, compare the positions directly
-    x_start <- x_end <- cyclical_position(xv, x_chronon, cycle)
-    y_start <- y_end <- cyclical_position(yv, y_chronon, cycle)
+    # No conversion needed: a shared chronon unit is always exactly 1 wide
+    x_start <- cyclical_position(xv, x_chronon, cycle)
+    y_start <- cyclical_position(yv, y_chronon, cycle)
+    x_end <- if (x_discrete) x_start + 1 else x_start
+    y_end <- if (y_discrete) y_start + 1 else y_start
   } else {
-    # Different granules: express both positions as closed intervals ([start,
-    # end]) in their common (finest shared) chronon, then compare endpoints,
-    # mirroring `linear_compare()`.
-    common <- chronon_common_impl(list(x_chronon, y_chronon))
+    # Convert to the common chronon before reducing to a cycle position and
+    # measuring each operand's width in it, mirroring `linear_compare()`
+    common <- chronon_glb_impl(list(x_chronon, y_chronon))
     x_start <- cyclical_position(
-      chronon_convert_impl(xv, x_chronon, common, discrete = is.integer(xv)),
+      chronon_convert_impl(xv, x_chronon, common, discrete = x_discrete),
       common, cycle
     )
     y_start <- cyclical_position(
-      chronon_convert_impl(yv, y_chronon, common, discrete = is.integer(yv)),
+      chronon_convert_impl(yv, y_chronon, common, discrete = y_discrete),
       common, cycle
     )
 
     x_end <- x_start
-    if (is.integer(xv)) {
-      x_end <- x_start + chronon_cardinality(common, x_chronon, at = xv) - 1
-    }
+    if (x_discrete) x_end <- x_start + chronon_cardinality(common, x_chronon, at = xv)
     y_end <- y_start
-    if (is.integer(yv)) {
-      y_end <- y_start + chronon_cardinality(common, y_chronon, at = yv) - 1
-    }
+    if (y_discrete) y_end <- y_start + chronon_cardinality(common, y_chronon, at = yv)
   }
 
-  switch(
-    op,
-    "==" = x_start == y_start & x_end == y_end,
-    "!=" = !(x_start == y_start & x_end == y_end),
-    "<"  = x_end < y_start,
-    ">"  = x_start > y_end,
-    "<=" = x_end <= y_end,
-    ">=" = x_start >= y_start
-  )
+  interval_relation(op, list(x_start, x_end), list(y_start, y_end))
 }
 
 method(`==`, list(mt_cyclical, class_any)) <- function(e1, e2) cyclical_compare("==", e1, e2)
@@ -312,6 +448,257 @@ method(`>`, list(class_any, mt_cyclical)) <- function(e1, e2) cyclical_compare("
 
 method(`>=`, list(mt_cyclical, class_any)) <- function(e1, e2) cyclical_compare(">=", e1, e2)
 method(`>=`, list(class_any, mt_cyclical)) <- function(e1, e2) cyclical_compare(">=", e1, e2)
+
+interval_relation <- function(op, e1, e2) {
+  switch(
+    op,
+    "==" = e1[[1L]] == e2[[1L]] & e1[[2L]] == e2[[2L]],
+    "!=" = !(e1[[1L]] == e2[[1L]] & e1[[2L]] == e2[[2L]]),
+    "<"  = e1[[2L]] <= e2[[1L]],
+    ">"  = e1[[1L]] >= e2[[2L]],
+    "<=" = e1[[2L]] <= e2[[2L]],
+    ">=" = e1[[1L]] >= e2[[1L]],
+    "%p%"  = e1[[2L]] <  e2[[1L]],
+    "%pi%" = e2[[2L]] <  e1[[1L]],
+    "%m%"  = e1[[2L]] == e2[[1L]],
+    "%mi%" = e2[[2L]] == e1[[1L]],
+    "%o%"  = e1[[1L]] <  e2[[1L]] & e2[[1L]] <  e1[[2L]] & e1[[2L]] <  e2[[2L]],
+    "%oi%" = e2[[1L]] <  e1[[1L]] & e1[[1L]] <  e2[[2L]] & e2[[2L]] <  e1[[2L]],
+    "%s%"  = e1[[1L]] == e2[[1L]] & e1[[2L]] <  e2[[2L]],
+    "%si%" = e1[[1L]] == e2[[1L]] & e1[[2L]] >  e2[[2L]],
+    "%d%"  = e1[[1L]] >  e2[[1L]] & e1[[2L]] <  e2[[2L]],
+    "%di%" = e1[[1L]] <  e2[[1L]] & e1[[2L]] >  e2[[2L]],
+    "%f%"  = e1[[2L]] == e2[[2L]] & e1[[1L]] >  e2[[1L]],
+    "%fi%" = e1[[2L]] == e2[[2L]] & e1[[1L]] <  e2[[1L]]
+  )
+}
+
+#' Allen's interval algebra for time vectors
+#'
+#' @description
+#' Allen's interval algebra has thirteen base relations for time intervals.
+#' `==` is defined in [mt_linear-compare]/[mt_cyclical-compare]; the twelve
+#' operators below define the rest, computed from the same interval endpoints
+#' (`start`/`end`) that comparison derives. Together, they cover all thirteen
+#' relations:
+#'
+#' | Operator | Relation      | `e1 %op% e2` holds iff                                    |
+#' | -------- | ------------- | ---------------------------------------------------------- |
+#' | `%p%`    | precedes      | `e1` ends before `e2` begins (a gap)                        |
+#' | `%m%`    | meets         | `e1` ends exactly where `e2` begins (no gap, no overlap)    |
+#' | `%o%`    | overlaps      | `e1` begins before `e2`, `e1` ends between the start and end of `e2` |
+#' | `%s%`    | starts        | `e1` and `e2` begin together, and `e1` ends first           |
+#' | `%d%`    | during        | `e1` is strictly within `e2`'s span                         |
+#' | `%f%`    | finishes      | `e1` and `e2` end together, and `e1` begins later           |
+#' | `==`     | equals        | `e1` and `e2` share both endpoints                          |
+#' | `%pi%`   | preceded by   | `e2 %p% e1`                                                 |
+#' | `%mi%`   | met by        | `e2 %m% e1`                                                 |
+#' | `%oi%`   | overlapped by | `e2 %o% e1`                                                 |
+#' | `%si%`   | started by    | `e2 %s% e1`                                                 |
+#' | `%di%`   | contains      | `e2 %d% e1`                                                 |
+#' | `%fi%`   | finished by   | `e2 %f% e1`                                                 |
+#'
+#' [mt_linear-compare]/[mt_cyclical-compare]'s `<`/`>` are a deliberate
+#' deviations from their use as 'precedes' in Allen's interval algebra
+#' (`%p%`/`%pi%` operators). The important difference is that `<`/`>` include
+#' 'meets' relations, while `%p%`/`%pi%` requires gaps, so in the examples
+#' below `jan < feb` is TRUE in mixtime but the equivalent symbol in Allen's
+#' interval algebra (`jan %p% feb`) is FALSE because there is no gap.
+#'
+#' The implementation here also extends to continuous time instants, which are
+#' treated as degenerate zero-width intervals. This allows testing how a 
+#' specific time instant relates to time spans, for example does January 2020
+#' contain 30% through the day 2020-01-24 is 
+#' `yearmonth("2020-01") %di% date(datetime("2020-01-24 07:12:00"), discrete = FALSE)`.
+#' This is a technical deviation from Allen's interval algebra, which assumes
+#' that intervals are non-degenerate (i.e. end > start, not end >= start).
+#' 
+#' @param e1,e2 `mt_linear` or `mt_cyclical` vectors sharing a mode of time
+#'   (and, for `mt_cyclical`, a cycle) - or values castable to one, such as
+#'   plain numeric vectors in the other operand's chronon, read from its epoch
+#'   as [mixtime()] reads them. `mt_duration`
+#'   has no interval to compare and so is not supported.
+#'
+#' @return A logical vector.
+#'
+#' @seealso [mt_linear-compare] and [mt_cyclical-compare] for `==`, `<`, `>`,
+#'   `<=`, `>=` - the three of Allen's relations that also form the package's
+#'   ordering (`<`/`>` in a looser, adjacency-inclusive form than `%p%`/`%pi%`).
+#'
+#' @references
+#' Allen, J. F. (1983). Maintaining knowledge about temporal intervals.
+#' *Communications of the ACM*, 26(11), 832-843.
+#'
+#' @examples
+#' jan <- yearmonth("2020 Jan")
+#' feb <- yearmonth("2020 Feb")
+#' mar <- yearmonth("2020 Mar")
+#' q1 <- yearquarter("2020 Q1")
+#'
+#' jan == jan    # January equals itself
+#'
+#' jan %p% mar   # January precedes March: February leaves a genuine gap
+#' mar %pi% jan  # ... equivalently, March is preceded by January
+#'
+#' jan %m% feb   # January meets February: adjacent, no gap
+#' feb %mi% jan  # ... equivalently, February is met by January
+#' jan < feb     # `<` also holds for adjacent pairs, unlike `%p%`
+#' jan %p% feb   # FALSE: no gap between them, so they don't (strictly) precede
+#'
+#' jan %s% q1    # January and Q1 start together, but January finishes first
+#' q1 %si% jan   # ... equivalently, Q1 is started by January
+#'
+#' feb %d% q1    # February is strictly within Q1
+#' q1 %di% feb   # ... equivalently, Q1 contains February
+#'
+#' mar %f% q1    # March and Q1 finish together, but March starts later
+#' q1 %fi% mar   # ... equivalently, Q1 is finished by March
+#'
+#' @name allen-interval-algebra
+NULL
+
+#' @rdname allen-interval-algebra
+#' @export
+`%p%` <- S7::new_generic("%p%", c("e1", "e2"), fun = function(e1, e2) S7::S7_dispatch())
+
+#' @rdname allen-interval-algebra
+#' @export
+`%pi%` <- S7::new_generic("%pi%", c("e1", "e2"), fun = function(e1, e2) S7::S7_dispatch())
+
+#' @rdname allen-interval-algebra
+#' @export
+`%m%` <- S7::new_generic("%m%", c("e1", "e2"), fun = function(e1, e2) S7::S7_dispatch())
+
+#' @rdname allen-interval-algebra
+#' @export
+`%mi%` <- S7::new_generic("%mi%", c("e1", "e2"), fun = function(e1, e2) S7::S7_dispatch())
+
+#' @rdname allen-interval-algebra
+#' @export
+`%o%` <- S7::new_generic("%o%", c("e1", "e2"), fun = function(e1, e2) S7::S7_dispatch())
+
+#' @rdname allen-interval-algebra
+#' @export
+`%oi%` <- S7::new_generic("%oi%", c("e1", "e2"), fun = function(e1, e2) S7::S7_dispatch())
+
+#' @rdname allen-interval-algebra
+#' @export
+`%s%` <- S7::new_generic("%s%", c("e1", "e2"), fun = function(e1, e2) S7::S7_dispatch())
+
+#' @rdname allen-interval-algebra
+#' @export
+`%si%` <- S7::new_generic("%si%", c("e1", "e2"), fun = function(e1, e2) S7::S7_dispatch())
+
+#' @rdname allen-interval-algebra
+#' @export
+`%d%` <- S7::new_generic("%d%", c("e1", "e2"), fun = function(e1, e2) S7::S7_dispatch())
+
+#' @rdname allen-interval-algebra
+#' @export
+`%di%` <- S7::new_generic("%di%", c("e1", "e2"), fun = function(e1, e2) S7::S7_dispatch())
+
+#' @rdname allen-interval-algebra
+#' @export
+`%f%` <- S7::new_generic("%f%", c("e1", "e2"), fun = function(e1, e2) S7::S7_dispatch())
+
+#' @rdname allen-interval-algebra
+#' @export
+`%fi%` <- S7::new_generic("%fi%", c("e1", "e2"), fun = function(e1, e2) S7::S7_dispatch())
+
+# Custom infix operators aren't aware of vecvec's slot dispatch
+# This function factory defines the mixtime dispatch for these new operators
+mixtime_compare <- function(.generic) {
+  function(e1, e2) vecvec::vecvec_mapply(list(e1, e2), .generic, ptype = logical())
+}
+
+method(`%p%`, list(mt_linear, class_any)) <- function(e1, e2) linear_compare("%p%", e1, e2)
+method(`%p%`, list(class_any, mt_linear)) <- function(e1, e2) linear_compare("%p%", e1, e2)
+method(`%p%`, list(mt_cyclical, class_any)) <- function(e1, e2) cyclical_compare("%p%", e1, e2)
+method(`%p%`, list(class_any, mt_cyclical)) <- function(e1, e2) cyclical_compare("%p%", e1, e2)
+method(`%p%`, list(class_mixtime, class_any)) <- mixtime_compare(`%p%`)
+method(`%p%`, list(class_any, class_mixtime)) <- mixtime_compare(`%p%`)
+
+method(`%pi%`, list(mt_linear, class_any)) <- function(e1, e2) linear_compare("%pi%", e1, e2)
+method(`%pi%`, list(class_any, mt_linear)) <- function(e1, e2) linear_compare("%pi%", e1, e2)
+method(`%pi%`, list(mt_cyclical, class_any)) <- function(e1, e2) cyclical_compare("%pi%", e1, e2)
+method(`%pi%`, list(class_any, mt_cyclical)) <- function(e1, e2) cyclical_compare("%pi%", e1, e2)
+method(`%pi%`, list(class_mixtime, class_any)) <- mixtime_compare(`%pi%`)
+method(`%pi%`, list(class_any, class_mixtime)) <- mixtime_compare(`%pi%`)
+
+method(`%m%`, list(mt_linear, class_any)) <- function(e1, e2) linear_compare("%m%", e1, e2)
+method(`%m%`, list(class_any, mt_linear)) <- function(e1, e2) linear_compare("%m%", e1, e2)
+method(`%m%`, list(mt_cyclical, class_any)) <- function(e1, e2) cyclical_compare("%m%", e1, e2)
+method(`%m%`, list(class_any, mt_cyclical)) <- function(e1, e2) cyclical_compare("%m%", e1, e2)
+method(`%m%`, list(class_mixtime, class_any)) <- mixtime_compare(`%m%`)
+method(`%m%`, list(class_any, class_mixtime)) <- mixtime_compare(`%m%`)
+
+method(`%mi%`, list(mt_linear, class_any)) <- function(e1, e2) linear_compare("%mi%", e1, e2)
+method(`%mi%`, list(class_any, mt_linear)) <- function(e1, e2) linear_compare("%mi%", e1, e2)
+method(`%mi%`, list(mt_cyclical, class_any)) <- function(e1, e2) cyclical_compare("%mi%", e1, e2)
+method(`%mi%`, list(class_any, mt_cyclical)) <- function(e1, e2) cyclical_compare("%mi%", e1, e2)
+method(`%mi%`, list(class_mixtime, class_any)) <- mixtime_compare(`%mi%`)
+method(`%mi%`, list(class_any, class_mixtime)) <- mixtime_compare(`%mi%`)
+
+method(`%o%`, list(mt_linear, class_any)) <- function(e1, e2) linear_compare("%o%", e1, e2)
+method(`%o%`, list(class_any, mt_linear)) <- function(e1, e2) linear_compare("%o%", e1, e2)
+method(`%o%`, list(mt_cyclical, class_any)) <- function(e1, e2) cyclical_compare("%o%", e1, e2)
+method(`%o%`, list(class_any, mt_cyclical)) <- function(e1, e2) cyclical_compare("%o%", e1, e2)
+method(`%o%`, list(class_mixtime, class_any)) <- mixtime_compare(`%o%`)
+method(`%o%`, list(class_any, class_mixtime)) <- mixtime_compare(`%o%`)
+
+# `%o%` overrides base's outer-product operator (both are named `%o%`); when neither
+# operand is a mixtime type, fall back to that base behaviour instead of erroring, so
+# attaching mixtime doesn't break existing `%o%` usage.
+method(`%o%`, list(class_any, class_any)) <- function(e1, e2) outer(e1, e2)
+
+method(`%oi%`, list(mt_linear, class_any)) <- function(e1, e2) linear_compare("%oi%", e1, e2)
+method(`%oi%`, list(class_any, mt_linear)) <- function(e1, e2) linear_compare("%oi%", e1, e2)
+method(`%oi%`, list(mt_cyclical, class_any)) <- function(e1, e2) cyclical_compare("%oi%", e1, e2)
+method(`%oi%`, list(class_any, mt_cyclical)) <- function(e1, e2) cyclical_compare("%oi%", e1, e2)
+method(`%oi%`, list(class_mixtime, class_any)) <- mixtime_compare(`%oi%`)
+method(`%oi%`, list(class_any, class_mixtime)) <- mixtime_compare(`%oi%`)
+
+method(`%s%`, list(mt_linear, class_any)) <- function(e1, e2) linear_compare("%s%", e1, e2)
+method(`%s%`, list(class_any, mt_linear)) <- function(e1, e2) linear_compare("%s%", e1, e2)
+method(`%s%`, list(mt_cyclical, class_any)) <- function(e1, e2) cyclical_compare("%s%", e1, e2)
+method(`%s%`, list(class_any, mt_cyclical)) <- function(e1, e2) cyclical_compare("%s%", e1, e2)
+method(`%s%`, list(class_mixtime, class_any)) <- mixtime_compare(`%s%`)
+method(`%s%`, list(class_any, class_mixtime)) <- mixtime_compare(`%s%`)
+
+method(`%si%`, list(mt_linear, class_any)) <- function(e1, e2) linear_compare("%si%", e1, e2)
+method(`%si%`, list(class_any, mt_linear)) <- function(e1, e2) linear_compare("%si%", e1, e2)
+method(`%si%`, list(mt_cyclical, class_any)) <- function(e1, e2) cyclical_compare("%si%", e1, e2)
+method(`%si%`, list(class_any, mt_cyclical)) <- function(e1, e2) cyclical_compare("%si%", e1, e2)
+method(`%si%`, list(class_mixtime, class_any)) <- mixtime_compare(`%si%`)
+method(`%si%`, list(class_any, class_mixtime)) <- mixtime_compare(`%si%`)
+
+method(`%d%`, list(mt_linear, class_any)) <- function(e1, e2) linear_compare("%d%", e1, e2)
+method(`%d%`, list(class_any, mt_linear)) <- function(e1, e2) linear_compare("%d%", e1, e2)
+method(`%d%`, list(mt_cyclical, class_any)) <- function(e1, e2) cyclical_compare("%d%", e1, e2)
+method(`%d%`, list(class_any, mt_cyclical)) <- function(e1, e2) cyclical_compare("%d%", e1, e2)
+method(`%d%`, list(class_mixtime, class_any)) <- mixtime_compare(`%d%`)
+method(`%d%`, list(class_any, class_mixtime)) <- mixtime_compare(`%d%`)
+
+method(`%di%`, list(mt_linear, class_any)) <- function(e1, e2) linear_compare("%di%", e1, e2)
+method(`%di%`, list(class_any, mt_linear)) <- function(e1, e2) linear_compare("%di%", e1, e2)
+method(`%di%`, list(mt_cyclical, class_any)) <- function(e1, e2) cyclical_compare("%di%", e1, e2)
+method(`%di%`, list(class_any, mt_cyclical)) <- function(e1, e2) cyclical_compare("%di%", e1, e2)
+method(`%di%`, list(class_mixtime, class_any)) <- mixtime_compare(`%di%`)
+method(`%di%`, list(class_any, class_mixtime)) <- mixtime_compare(`%di%`)
+
+method(`%f%`, list(mt_linear, class_any)) <- function(e1, e2) linear_compare("%f%", e1, e2)
+method(`%f%`, list(class_any, mt_linear)) <- function(e1, e2) linear_compare("%f%", e1, e2)
+method(`%f%`, list(mt_cyclical, class_any)) <- function(e1, e2) cyclical_compare("%f%", e1, e2)
+method(`%f%`, list(class_any, mt_cyclical)) <- function(e1, e2) cyclical_compare("%f%", e1, e2)
+method(`%f%`, list(class_mixtime, class_any)) <- mixtime_compare(`%f%`)
+method(`%f%`, list(class_any, class_mixtime)) <- mixtime_compare(`%f%`)
+
+method(`%fi%`, list(mt_linear, class_any)) <- function(e1, e2) linear_compare("%fi%", e1, e2)
+method(`%fi%`, list(class_any, mt_linear)) <- function(e1, e2) linear_compare("%fi%", e1, e2)
+method(`%fi%`, list(mt_cyclical, class_any)) <- function(e1, e2) cyclical_compare("%fi%", e1, e2)
+method(`%fi%`, list(class_any, mt_cyclical)) <- function(e1, e2) cyclical_compare("%fi%", e1, e2)
+method(`%fi%`, list(class_mixtime, class_any)) <- mixtime_compare(`%fi%`)
+method(`%fi%`, list(class_any, class_mixtime)) <- mixtime_compare(`%fi%`)
 
 # Ordering and de-duplication of mixtime vectors
 method(xtfrm, class_mixtime) <- function(x) {

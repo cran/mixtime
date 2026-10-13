@@ -21,14 +21,13 @@
 chronon_parts <- function(x, linear = list(), cyclical = list()) {
   start_tu <- attr(x, "chronon")
 
-  # Shift the time points into local time, truncating the offset for discrete
-  # time models so they remain whole chronons. A continuous time model keeps
-  # its fractional position instead of flooring it away here.
+  # Read the time points as local wall-clock values. A continuous time model
+  # keeps its fractional position instead of flooring it away here, less any
+  # floating-point error that would floor a whole unit away.
   x <- vec_data(x)
   discrete <- is.integer(x)
-  offset <- tz_offset_impl(x, start_tu)
-  x <- x + if (discrete) trunc(offset) else offset
-  if (discrete) x <- floor(x)
+  x <- chronon_to_local(start_tu, round_ulp(x))
+  x <- if (discrete) floor_ulp(x) else round_ulp(x)
 
   # The two granules of a cyclical part: the chronon is the finer unit (the
   # desired output unit) and the cycle the coarser unit it repeats within.
@@ -81,12 +80,31 @@ chronon_parts <- function(x, linear = list(), cyclical = list()) {
   # Find a suitable tree of chronon_divmod() steps that computes all cyclical
   # and linear parts. Cross-unit cycles must reach both of their granules on one
   # root-to-leaf path, while the other targets need only be reached.
-  tree <- S7_graph_dispatch_multi(
+  #
+  # `group_idx` maps each element of the `groups` argument back to its
+  # position in `cyclical`/`chronon_ids`/`cycle_ids` (the filtered list passed
+  # as `groups` drops elements in order, so `which()` recovers the original
+  # index of each survivor).
+  group_idx <- which(!self_cycle & !cycle_is_root)
+  dispatch <- S7_graph_dispatch_multi(
     graph      = chronon_cardinality_graph(),
     start      = start_tu,
     terminals  = c(linear, cyclical_chronon[self_cycle]),
-    groups     = cyclical[!self_cycle & !cycle_is_root]
+    groups     = cyclical[group_idx]
   )
+  tree <- dispatch$tree
+
+  # A group that could not be co-located on one path (a real structural gap
+  # in the registered graph, not something to paper over) must not let
+  # traverse() match its chronon/cycle by class id alone: either class might
+  # still be reachable via some *other*, unrelated group or terminal, which
+  # would silently compute a wrong (non-NULL) value instead of leaving the
+  # part genuinely missing. Nulling both ids here (the same pattern already
+  # used above for self_cycle/cycle_is_root) makes them unmatchable, so
+  # abort_missing_parts() below correctly reports them.
+  failed <- group_idx[dispatch$failed_groups]
+  chronon_ids[failed] <- NA_character_
+  cycle_ids[failed] <- NA_character_
 
   # Traverse the divmod path to compute parts. `parent_id` is the caller's
   # `child_id`, so it is handed down rather than looked up again.

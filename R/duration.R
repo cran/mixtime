@@ -11,9 +11,9 @@
 #'  `day(1L)`. Chronons from a specific calendar can also be used (e.g.
 #'  `cal_gregorian$month(1L)`). Defaults to the time chronon of the input
 #'  `data` (`time_chronon(data)`).
-#' @param discrete Logical. If `TRUE` (default), returns integer durations 
-#'   always rounding down (discrete time model). If `FALSE`, returns fractional 
-#'   durations (continuous time model).
+#' @param discrete Logical. If `TRUE` (default), returns integer durations
+#'   counting whole granules, rounding towards zero (discrete time model). If
+#'   `FALSE`, returns fractional durations (continuous time model).
 #' @param calendar Calendar system used to evaluate `chronon`. Defaults to
 #'   `time_calendar(data)` for existing time objects. Common options include
 #'   [cal_gregorian] and [cal_isoweek].
@@ -72,7 +72,7 @@ duration <- function(
       error = function(e) {
         cli::cli_abort(
           c(
-            "Can't convert a duration from {.val {time_unit_plural(from_chronon)}} to {.val {time_unit_plural(chronon)}}.",
+            "Can't convert a duration with a chronon of {.val {time_granule_label(from_chronon)}} to one of {.val {time_granule_label(chronon)}}.",
             i = "Their ratio depends on where in the calendar the duration falls, but a duration has no anchor to resolve that against.",
             i = "Convert a {.cls mixtime} time point instead, which carries the calendar context this conversion needs."
           ),
@@ -82,14 +82,16 @@ duration <- function(
       }
     )
     x <- as.numeric(raw) * cardinality
-    if (discrete) x <- as.integer(floor(x))
+    # Discrete durations count whole granules, so a partial granule of either
+    # sign is dropped (-4 days is 0 weeks, not -1).
+    if (discrete) x <- as.integer(trunc(round_ulp(x)))
     return(new_mixtime(mt_duration(x, chronon = chronon)))
   }
 
   if (S7_inherits(data, mt_time)) {
     cli::cli_abort(
       c(
-        "{.var data} already has chronon {.val {time_unit_plural(attr(data, 'chronon'))}}, but it isn't a duration.",
+        "{.var data} already has a chronon of {.val {time_granule_label(attr(data, 'chronon'))}}, but it isn't a duration.",
         i = "{.fn duration} converts duration vectors; use {.fn mixtime} to convert time points."
       ),
       call = NULL

@@ -6,6 +6,29 @@ test_that("chronon_cardinality_fixed() returns the unit-granule constant", {
   expect_error(chronon_cardinality_fixed(cal_gregorian$day(1L), cal_gregorian$month(1L)))
 })
 
+test_that("chronon_cardinality_fixed() scales the same time unit by granule size", {
+  expect_equal(chronon_cardinality_fixed(cal_gregorian$day(1L), cal_gregorian$day(10L)), 10)
+  expect_equal(chronon_cardinality_fixed(cal_gregorian$day(1L), cal_gregorian$day(1L)), 1)
+  expect_equal(chronon_cardinality_fixed(cal_gregorian$day(10L), cal_gregorian$day(1L)), 1 / 10)
+})
+
+test_that("chronon_cardinality_fixed() scales different time units by granule size", {
+  # A direct method
+  expect_equal(chronon_cardinality_fixed(cal_time_civil$minute(15L), cal_time_civil$hour(1L)), 4)
+  expect_equal(chronon_cardinality_fixed(cal_gregorian$month(2L), cal_gregorian$year(3L)), 18)
+  # A path of methods, in either direction
+  expect_equal(chronon_cardinality_fixed(cal_time_civil$minute(15L), cal_time_civil$day(1L)), 96)
+  expect_equal(chronon_cardinality_fixed(cal_time_civil$day(2L), cal_time_civil$hour(12L)), 1 / 4)
+
+  # Methods give the unit granule ratio, regardless of the granule sizes
+  tu_scale_test_a <- S7::new_class("tu_scale_test_a", parent = mt_unit)
+  tu_scale_test_b <- S7::new_class("tu_scale_test_b", parent = mt_unit)
+  method(chronon_cardinality_fixed, list(tu_scale_test_a, tu_scale_test_b)) <- function(x, y) 5L
+  expect_equal(chronon_cardinality_fixed(tu_scale_test_a(2L), tu_scale_test_b(4L)), 10)
+  expect_equal(chronon_cardinality(tu_scale_test_a(2L), tu_scale_test_b(4L)), 10)
+  expect_equal(chronon_cardinality(tu_scale_test_b(4L), tu_scale_test_a(2L)), 1 / 10)
+})
+
 test_that("chronon_cardinality_fixed() traverses edges in either direction", {
   # A coarser `x` than `y` walks the graph against the fine -> coarse direction
   # its edges are registered in, giving the reciprocal.
@@ -50,7 +73,7 @@ test_that("only fixed cardinality (and direct divmod) relationships form divmod 
   }
 
   # Both relationships are visible to the cardinality graph, used for
-  # ordering/topology by chronon_common() and time_parts().
+  # ordering/topology by chronon_glb() and time_parts().
   expect_true(edge_exists(chronon_cardinality_graph(), tu_fixed_test_a(1L), tu_fixed_test_b(1L)))
   expect_true(edge_exists(chronon_cardinality_graph(), tu_variable_test_a(1L), tu_variable_test_b(1L)))
 

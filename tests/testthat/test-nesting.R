@@ -58,6 +58,28 @@ test_that("chronon_nests_in() checks @n for pairs only reachable via an irregula
   expect_error(chronon_nests_in(cal_gregorian$day(2L), cal_gregorian$month(1L)))
   expect_error(chronon_nests_in(cal_gregorian$day(7L), cal_gregorian$year(1L)))
 
+  # Unless it nests within a single unit of an intermediate granule that nests
+  # in turn (30 minutes nest within days, which nest within months)
+  expect_true(chronon_nests_in(cal_gregorian$minute(30L), cal_gregorian$month(1L)))
+  expect_true(chronon_nests_in(cal_gregorian$hour(6L), cal_gregorian$year(1L)))
+
   # No registered relationship at all is still a plain FALSE, not an error.
   expect_false(chronon_nests_in(cal_gregorian$month(1L), cal_time_lunar$phase(1L)))
+})
+
+test_that("chronon_fixed_multiple() checks for whole numbers of chronons", {
+  week <- cal_isoweek$week(1L)
+  expect_equal(
+    chronon_fixed_multiple(week, cal_gregorian$day(1L), c(7, 11, 14, -14, 0, NA)),
+    c(TRUE, FALSE, TRUE, TRUE, TRUE, TRUE)
+  )
+  expect_equal(
+    chronon_fixed_multiple(cal_gregorian$minute(30L), cal_gregorian$minute(1L), c(15, 60)),
+    c(FALSE, TRUE)
+  )
+  # No fixed cardinality: only a shift of zero
+  expect_equal(
+    chronon_fixed_multiple(week, cal_gregorian$year(1L), c(0, 1)),
+    c(TRUE, FALSE)
+  )
 })
