@@ -15,7 +15,7 @@
 #' - `month()`: Synodic month unit
 #' - `phase()`: Synodic phase unit
 #' 
-#' @return An S3 list of class `c("cal_time_lunar", "mt_calendar")` containing
+#' @return A calendar (an S7 [`mt_calendar`] object of class `cal_time_lunar_synodic`) containing
 #'   the named time unit classes of the synodic lunar calendar. Each unit is
 #'   accessible via `$` notation and calling it with a step size produces a
 #'   time granule (e.g., 1 synodic month granule as
@@ -32,8 +32,9 @@
 #' @name calendar_time_lunar
 #' @export
 cal_time_lunar_synodic <- new_calendar(
-  month = S7::new_class("tu_lunar_month", parent = mt_loc_unit),
-  phase = S7::new_class("tu_lunar_phase", parent = mt_loc_unit)
+  month = new_time_unit("tu_lunar_month", parent = mt_loc_unit),
+  phase = new_time_unit("tu_lunar_phase", parent = mt_loc_unit),
+  name = "cal_time_lunar_synodic"
 )
 
 #' @export
@@ -41,10 +42,14 @@ cal_time_lunar_synodic <- new_calendar(
 cal_time_lunar <- cal_time_lunar_synodic
 
 # Time granule labels
-method(time_unit_full, cal_time_lunar$month) <- function(x) "synodic month{?/s}"
-method(time_unit_abbr, cal_time_lunar$month) <- function(x) "LM"
-method(time_unit_full, cal_time_lunar$phase) <- function(x) "synodic phase{?/s}"
-method(time_unit_abbr, cal_time_lunar$phase) <- function(x) "LP"
+method(unit_labels, cal_time_lunar$month) <- unit_scheme(
+  vocab = vocab_table(`en-GB` = list(wide = "synodic month{?/s}")),
+  symbol = "LM"
+)
+method(unit_labels, cal_time_lunar$phase) <- unit_scheme(
+  vocab = vocab_table(`en-GB` = list(wide = "synodic phase{?/s}")),
+  symbol = "LP"
+)
 
 # Default formats
 method(chronon_format_linear, list(cal_time_lunar$month, class_any)) <- function(x, cal) "L{lin(month)}"

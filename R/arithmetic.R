@@ -124,7 +124,7 @@ check_shift_determinate <- function(chronon, unit, n) {
     c(
       "Cannot shift {label} time points by {by}, the result is temporally indeterminate.",
       "x" = "A discrete {.field {label}} spans a period of time that doesn't shift as a whole by {by}.",
-      "!" = if (other_cal) "{by} is from {.code {class(unit_cal)[[1L]]}}, while {label} is from {.code {class(cal)[[1L]]}}.",
+      "!" = if (other_cal) "{by} is from {.code {S7::S7_class(unit_cal)@name}}, while {label} is from {.code {S7::S7_class(cal)@name}}.",
       "i" = "Shift by a duration that {label} {cli::qty(chronon@n)}nest{?s/} within or that is a multiple of {label}, or use continuous time."
     ),
     class = "mixtime_error_indeterminate",
@@ -173,7 +173,7 @@ duration_combine <- function(e1, e2, op) {
   res <- op(xd, yd)
   # duration / duration = numeric ratio; otherwise a duration with the common chronon
   if (identical(op, `/`)) {
-    return(res)
+    return(as.vector(res))
   }
   mt_duration(res, chronon = tu)
 }
@@ -202,6 +202,86 @@ S7::method(vec_math, mt_time) <- function(.fn, .x, ...) {
   )
 }
 
+#' Arithmetic for time points (`mt_time`)
+#'
+#' @description
+#' Time points, linear (e.g. [yearmonth()]) or located cyclical (e.g.
+#' `month_of_year(Sys.Date())`), support:
+#'
+#' - **Shifts**: `x + d`, `x - d` and `d + x` shift by a [duration()]. Time
+#'   points that don't exist (e.g. 31 January plus one month) are resolved
+#'   with the `mixtime.on_invalid` option; see [time_shift()].
+#' - **Shifts by chronons**: `x + n` and `x - n` shift by `n` of the time
+#'   points' own chronon.
+#' - **Differences**: `a - b` is a [duration()] in their finest common
+#'   chronon.
+#'
+#' Located cyclical time shifts its underlying time, and its position within
+#' the cycle follows. For underspecified cyclical time, see
+#' [mt_cyclical_free-arithmetic].
+#'
+#' A discrete time point spans its whole chronon, so shifting by a duration
+#' finer than its chronon, or taking differences between discrete time points
+#' of different chronons, is an error. Any other combination, such as adding
+#' two time points or subtracting a time point from a duration, is also an
+#' error.
+#'
+#' @param e1,e2 Operands, at least one a time point (`mt_time`) vector.
+#'
+#' @return A time point vector for shifts, a duration ([mt_duration]) for
+#'   differences.
+#'
+#' @examples
+#' x <- yearmonth("2024-01")
+#' x + months(2)
+#' x + 0:3
+#' yearmonth("2024-05") - x
+#' date("2024-01-31") + months(1)
+#' month_of_year(yearmonth("2024-11")) + 3L
+#' try(date("2024-03-15") + hours(3))
+#'
+#' @usage
+#' \S4method{+}{mt_time}(e1, e2)
+#' \S4method{-}{mt_time}(e1, e2)
+#'
+#' @aliases +,mt_time-method -,mt_time-method
+#' @name mt_time-arithmetic
+NULL
+
+#' Arithmetic for durations (`mt_duration`)
+#'
+#' @description
+#' Durations (e.g. `days(3)`) support:
+#'
+#' - **Combining**: `a + b` and `a - b` give a duration in their finest common
+#'   chronon. The chronons must have a fixed ratio, so `months(1) + days(1)`
+#'   is an error.
+#' - **Ratios**: `a / b` is a number (e.g. `weeks(1) / days(1)` is 7).
+#' - **Scaling**: `d * n`, `n * d` and `d / n`.
+#' - **Adding numbers**: `d + n` and `d - n` count `n` in `d`'s chronon.
+#'
+#' Adding a duration to a time point shifts it, see [mt_time-arithmetic].
+#'
+#' @param e1,e2 Operands, at least one a duration (`mt_duration`) vector.
+#'
+#' @return A duration, or a number for the ratio of two durations.
+#'
+#' @examples
+#' weeks(1) + days(2)
+#' weeks(1) / days(1)
+#' days(3) * 2
+#' try(months(1) + days(1))
+#'
+#' @usage
+#' \S4method{+}{mt_duration}(e1, e2)
+#' \S4method{-}{mt_duration}(e1, e2)
+#' \S4method{*}{mt_duration}(e1, e2)
+#' \S4method{/}{mt_duration}(e1, e2)
+#'
+#' @aliases +,mt_duration-method -,mt_duration-method *,mt_duration-method /,mt_duration-method
+#' @name mt_duration-arithmetic
+NULL
+
 # --- differences in time produce durations in the common chronon --------------
 
 method(`-`, list(mt_time, mt_time)) <- function(e1, e2) {
@@ -212,7 +292,7 @@ method(`-`, list(mt_time, mt_time)) <- function(e1, e2) {
   # which instant within it is measured from. Only continuous time points are
   # instants that can be compared across chronons.
   discrete <- c(is.integer(S7_data(e1)), is.integer(S7_data(e2)))
-  if (!identical(x_chronon, y_chronon) && any(discrete)) {
+  if (!granule_identical(x_chronon, y_chronon) && any(discrete)) {
     cli::cli_abort(
       c(
         "The difference between time points of different chronons is indeterminate when either is discrete.",
@@ -249,8 +329,7 @@ method(`+`, list(mt_duration, mt_time)) <- function(e1, e2) {
 }
 
 method(`-`, list(mt_duration, mt_time)) <- function(e1, e2) {
-  S7_data(e2) <- duration_shift(e2, e1) - S7_data(e2)
-  e2
+  abort_subtract_time_point()
 }
 
 #' Shift time points by a duration
@@ -374,8 +453,33 @@ method(`+`, list(S7::class_numeric, mt_time)) <- function(e1, e2) {
   e2
 }
 method(`-`, list(S7::class_numeric, mt_time)) <- function(e1, e2) {
+  abort_subtract_time_point()
+}
+method(`-`, list(S7::class_numeric, mt_duration)) <- function(e1, e2) {
   S7_data(e2) <- e1 - S7_data(e2)
   e2
+}
+
+# --- unary operators ----------------------------------------------------------
+
+method(`+`, list(mt_time, S7::class_missing)) <- function(e1, e2) e1
+
+method(`-`, list(mt_time, S7::class_missing)) <- function(e1, e2) {
+  abort_subtract_time_point()
+}
+method(`-`, list(mt_duration, S7::class_missing)) <- function(e1, e2) {
+  S7_data(e1) <- -S7_data(e1)
+  e1
+}
+
+abort_subtract_time_point <- function() {
+  cli::cli_abort(
+    c(
+      "Can't subtract a time point from a number or duration, or negate it.",
+      "i" = "Subtract a duration from the time point instead, or take the difference of two time points."
+    ),
+    call = NULL
+  )
 }
 
 # --- numeric scaling of durations (e.g. days(3) * 2) --------------------------
@@ -400,6 +504,22 @@ method(`*`, list(S7::class_numeric, mt_duration)) <- function(e1, e2) {
 # chronon and lets formatting recompute the position - this also makes variable-length
 # cycles (e.g. day_of_month()) advance correctly, since there is no fixed period to wrap
 # against.
+#
+# `mt_cyclical_free` (underspecified cyclical time) has no underlying time to advance, so
+# it has its own, more specific, methods in cyclical_free_ops.R.
+
+# --- unwrapping plain results -------------------------------------------------
+
+# vecvec keeps arithmetic results in a mixtime vector, so results that aren't
+# time (e.g. the ratio of two durations) are returned as plain vectors.
+#' @export
+`Ops.mixtime::mixtime` <- function(e1, e2) {
+  res <- NextMethod()
+  if (is_mixtime(res) && !any(vapply(res@x, S7_inherits, logical(1L), mt_time))) {
+    res <- vecvec::unvecvec(res)
+  }
+  res
+}
 
 # --- friendly errors for unsupported operator/operand combinations ----------------
 # Registered on `class_any` so any operand pair that isn't handled above lands here. The

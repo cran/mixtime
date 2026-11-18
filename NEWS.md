@@ -1,3 +1,108 @@
+# mixtime 0.5.0
+
+## Breaking changes
+
+* Base R and C code that reads a mixtime vector directly, such as `lm()`,
+  `prcomp()` and `data.matrix()` on data frames with mixtime columns, now uses
+  the numbers that `as.numeric()` gives (the chronon count for linear time, and
+  the position within the cycle for cyclical time) rather than the vecvec index.
+  This needs vecvec >= 1.5.0 (older versions still work, without this).
+  `is.numeric()` is `TRUE` for mixtime vectors.
+* `as.numeric()` and `as.integer()` of cyclical time now give the position
+  within the cycle counted from its first label (`month_of_year(8)` is 8, and
+  `time_of_day(0)` is 0), so `cyclical_time(as.numeric(x))` round trips.
+
+## New features
+
+* Added underspecified cyclical time (`mt_cyclical_free`), a position within a
+  cycle whose enclosing cycle is unknown, e.g. "day 60 of the year" (#47). It
+  is created from bare numbers (e.g. `month_of_year(3)`), or by
+  `time_compose()`/`time_parse()` without a `lin()` component. It sorts,
+  compares and subtracts by position within the cycle, and arithmetic wraps
+  around fixed-length cycles (`month_of_year(12) + 1` is January). Use
+  `time_compose()` to locate it in a cycle for variable-length cycles, such as
+  `day_of_month()`. See `?cyclical_time` for details.
+* Added `time_is_cyclical_free()`, alongside the other `time_is_*()`
+  predicates.
+* Added `chronon_traverse()`, which walks to coarser or finer time units,
+  accumulating a value until a predicate is satisfied.
+* Added `chronon_cardinality_is_fixed()`, which tests whether the number of
+  one time unit in another is constant (e.g. months in a year, but not days in
+  a month).
+* `time_compose()` gains `on_ambiguous` and `offset` arguments to resolve local
+  times that occur twice when daylight saving ends. Without them, the earliest
+  time is used with a warning. The `mixtime.on_ambiguous` option sets the
+  default.
+* Added a `dur()` format token for formatting and parsing durations, e.g.
+  `format(x, "{dur(day)}")` and `time_parse("3 days", format = "{dur(day)}")`.
+  Parsing accepts an optional unit name (`"3 days"`, `"3D"`, `"3"`), and
+  fractional magnitudes with `discrete = FALSE`. Unit names are English-only
+  for now.
+
+## Deprecated
+
+* `new_calendar(class)` is deprecated in favour of `new_calendar(name)`.
+* `chronon_common()` now warns on every use. Use `chronon_glb()` instead.
+* The defunct `new_time()`, `is_time_linear()`, `is_time_cyclical()` and
+  `is_time_duration()` have been removed.
+
+## Breaking changes
+
+* Calendars are now S7 objects, so methods dispatch on
+  `S7::S7_class(cal_gregorian)` rather than `S7::new_S3_class("cal_gregorian")`.
+  `new_calendar()` now requires a `name`.
+* Time units now refer to their calendar by identifier rather than storing a
+  copy, which greatly reduces the size of serialised time objects. Custom unit
+  constructors should default to `calendar = attr(sys.function(), "cal")`.
+  Time objects saved by mixtime 0.4.0 or earlier can't be used with this
+  version.
+* Converting a discrete time to a chronon it doesn't nest within (e.g.
+  `yearmonth(yearweek(x))`) is now an error, as deprecated in 0.4.0.
+* `chronon_cardinality()` between time units that don't nest (e.g. weeks and
+  quarters) is now an error.
+* `time_compose()` and `time_parse()` without a `lin()` component only combine
+  components with fixed lengths, so day 15 of March is now an error (its day
+  of the year depends on the year).
+* `time_unit_full()`, `time_unit_abbr()` and `time_unit_plural()` are
+  replaced by a single unit scheme per time unit, registered with
+  `method(unit_labels, <unit>) <- unit_scheme(vocab, symbol, locale)`. Like
+  `label_scheme()`, names come from a `vocab` function (e.g.
+  ``vocab_table(`en-GB` = list(wide = "day{?/s}"))``). Unit names are shared by
+  duration formatting and parsing, granule labels, tsibble intervals and
+  messages.
+  The old functions remain as soft-deprecated wrappers for this release.
+
+## Improvements
+
+* Compatibility with development S7.
+* mixtime now requires vecvec (>= 1.4.0), fixing `c()` of a single empty
+  mixtime vector.
+* `chronon_cardinality()` has better support for a time-classed `at`.
+* `sort()` gains `align_discrete`, which sets the instant within a discrete
+  time span used to order it against time of another chronon (#103).
+
+## Bug fixes
+
+* `time_compose()` now composes time zone aware components in local time, and
+  keeps the order of components stored out of order.
+* `time_components()` no longer applies the UTC offset twice to components
+  finer than a day.
+* `zoo::yearmon()` and `zoo::yearqtr()` values now convert to the correct
+  months and quarters, and `as_mixtime()` now supports them and tsibble's
+  `yearweek()`, `yearmonth()` and `yearquarter()` (tidyverts/tsibble#272).
+* `min()`, `max()` and `range()` now correctly order mixed chronons and other
+  time classes. Other `Summary` generics (e.g. `sum()`) give an informative
+  error for time points (tidyverts/tsibble#272).
+* Whole-number granule sizes are now always stored as integers, so equivalent
+  chronons built from doubles and integers are identical.
+* Fixed `chronon_cardinality()` along paths with irregular steps.
+* `chronon_glb()` and `chronon_lub()` of chronons from different calendars
+  no longer return a bound with an arbitrary calendar.
+* Subtracting a time point from a number or duration, or negating it, is now
+  an error rather than giving a meaningless time point.
+* The ratio of two durations (e.g. `weeks(1) / days(1)`) is now a plain
+  number rather than a mixtime vector.
+
 # mixtime 0.4.0
 
 ## New features

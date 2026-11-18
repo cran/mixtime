@@ -79,12 +79,12 @@ test_that("seq.mixtime works with linear time using time unit objects", {
 })
 
 test_that("seq.mixtime works with cyclical time", {
-  # month_of_year sequence (full cycle)
-  result <- seq(month_of_year(0L), month_of_year(11L))
+  # bare input is 1-indexed (January = 1); a full year is months 1:12.
+  result <- seq(month_of_year(1L), month_of_year(12L))
   expect_s7_class(result, class_mixtime)
   expect_length(result, 12)
-  expect_equal(format(result[[1]]), format(month_of_year(0L)))
-  expect_equal(format(result[[12]]), format(month_of_year(11L)))
+  expect_equal(format(result[[1]]), format(month_of_year(1L)))
+  expect_equal(format(result[[12]]), format(month_of_year(12L)))
 
   # month_of_year with wrap-around and time unit by
   # result <- seq(month_of_year(5L), month_of_year(3L), by = cal_gregorian$month(2L))
@@ -94,12 +94,12 @@ test_that("seq.mixtime works with cyclical time", {
   # expect_equal(format(result[[1]]), format(month_of_year(5L)))
   # expect_equal(format(result[[6]]), format(month_of_year(3L)))
 
-  # day_of_week sequence with integer by
-  result <- seq(day_of_week(0L), day_of_week(6L), by = 1L)
+  # day_of_week sequence with integer by (1-indexed: Monday = 1)
+  result <- seq(day_of_week(1L), day_of_week(7L), by = 1L)
   expect_s7_class(result, class_mixtime)
   expect_length(result, 7)
-  expect_equal(format(result[[1]]), format(day_of_week(0L)))
-  expect_equal(format(result[[7]]), format(day_of_week(6L)))
+  expect_equal(format(result[[1]]), format(day_of_week(1L)))
+  expect_equal(format(result[[7]]), format(day_of_week(7L)))
 })
 
 test_that("seq.mixtime handles length.out correctly", {
@@ -110,11 +110,11 @@ test_that("seq.mixtime handles length.out correctly", {
   expect_equal(format(result[[1]]), format(yearmonth("2020 Jan")))
   expect_equal(format(result[[24]]), format(yearmonth("2021 Dec")))
 
-  # With cyclical time
-  result <- seq(month_of_year(0L), length.out = 15)
+  # With cyclical time (1-indexed: month_of_year(1L) is January)
+  result <- seq(month_of_year(1L), length.out = 15)
   expect_s7_class(result, class_mixtime)
   expect_length(result, 15)
-  expect_equal(format(result[[1]]), format(month_of_year(0L)))
+  expect_equal(format(result[[1]]), format(month_of_year(1L)))
 })
 
 test_that("seq.mixtime handles along.with correctly", {
@@ -664,5 +664,47 @@ test_that("seq.mixtime steps by months that don't divide a year", {
   expect_equal(
     format(seq(from, by = months(5L), length.out = 3L, on_invalid = "overflow")),
     c("2020-01-31", "2020-07-01", "2020-12-01")
+  )
+})
+
+test_that("granule sizes are stored consistently as integers", {
+  # A scalar Date gives a chronon scaled by a length-1 duration, which must
+  # match the chronon of an (every day) vector so they combine and sequence
+  s <- mixtime(as.Date("2019-12-28"))
+  x <- mixtime(as.Date("2020-01-01") + 0:3)
+  expect_identical(chronon_glb(s), chronon_glb(x))
+  expect_length(c(s, x[4])@x, 1L)
+  unit <- cal_gregorian$day(1L)
+  unit@n <- unit@n * 2
+  expect_identical(unit@n, 2L)
+  expect_identical(unit, cal_gregorian$day(2L))
+  expect_identical(cal_gregorian$day(3)@n, 3L)
+  # Fractional sizes are left as doubles
+  expect_identical(cal_gregorian$day(1.5)@n, 1.5)
+})
+
+test_that("seq.mixtime rejects `from` and `to` with different chronons", {
+  # Which values of a sequence are within a `to` of another chronon is
+  # temporally indeterminate (e.g. is March within 2020-03-15?)
+  expect_error(
+    seq(yearmonth("2020 Jan"), date("2020-03-15")),
+    "Incompatible time chronons"
+  )
+  expect_error(
+    seq(date("2020-01-15"), yearmonth("2020 Mar"), by = 1L),
+    "Incompatible time chronons"
+  )
+  expect_error(
+    seq(
+      mixtime(as.Date("2019-12-28")),
+      mixtime(as.Date("2020-01-11"), chronon = cal_gregorian$day(2L)),
+      by = cal_gregorian$day(2L)
+    ),
+    "Incompatible time chronons"
+  )
+  # Converting both to the same chronon makes the intent explicit
+  expect_equal(
+    format(seq(yearmonth("2020 Jan"), yearmonth(date("2020-03-15")))),
+    c("2020 Jan", "2020 Feb", "2020 Mar")
   )
 })

@@ -120,6 +120,15 @@ mixtime <- function(data, chronon = time_chronon(data), cycle = time_cycle(data)
 
   # Parse text data
   if (is.character(data)) {
+    if (identical(class(chronon)[1L], "mixtime::mt_unit")) {
+      cli::cli_abort(
+        c(
+          "Can't create a {.cls mixtime} from text without knowing its time unit.",
+          i = "Supply {.arg chronon} (e.g. {.code cal_gregorian$day(1L)}) or parse with {.fn time_parse} and a {.arg format}."
+        ),
+        call = NULL
+      )
+    }
     return(time_parse(data, chronon = chronon, cycle = cycle, discrete = discrete))
   } else {
     # Apply origin offset for numeric data
@@ -129,29 +138,11 @@ mixtime <- function(data, chronon = time_chronon(data), cycle = time_cycle(data)
 
     # Cast from Date, POSIXct, etc.
     if (!is.numeric(data) || !is.null(attributes(data))) {
-      # TODO: Escalate this deprecation warning to an error in the next release,
-      # by removing the handler (and `mixtime_user_env()`) and leaving
-      # `allow_indeterminate = FALSE`.
-      frame <- sys.nframe()
-      data <- tryCatch(
-        chronon_convert(
-          data,
-          chronon,
-          discrete = discrete,
-          allow_indeterminate = FALSE
-        ),
-        mixtime_error_indeterminate = function(cnd) {
-          lifecycle::deprecate_warn(
-            "0.4.0",
-            I("Converting a discrete time to a chronon it doesn't nest within"),
-            details = c(
-              i = "The result is temporally indeterminate, so each time point is converted from its start.",
-              i = "This will become an error in the next release. Convert from a time point that is precise enough, or use continuous time."
-            ),
-            user_env = mixtime_user_env(frame)
-          )
-          chronon_convert(data, chronon, discrete = discrete)
-        }
+      data <- chronon_convert(
+        data,
+        chronon,
+        discrete = discrete,
+        allow_indeterminate = FALSE
       )
     }
   }
@@ -163,24 +154,6 @@ mixtime <- function(data, chronon = time_chronon(data), cycle = time_cycle(data)
       mt_cyclical(data, chronon = chronon, cycle = cycle)
     }
   )
-}
-
-# The environment that called into mixtime, past mixtime's own wrappers (e.g.
-# `yearmonth()` -> `linear_time()` -> `mixtime()`), so that deprecation warnings
-# name the package responsible, and are recognised as direct calls by lifecycle
-# (which `lifecycle::expect_deprecated()` needs to warn on every call).
-# `frame` is the number of the frame to start from, i.e. `mixtime()`'s own.
-mixtime_user_env <- function(frame) {
-  ns <- topenv(environment(mixtime_user_env))
-  parents <- sys.parents()
-  i <- frame
-  while (i > 0L && identical(topenv(environment(sys.function(i))), ns)) {
-    # Frames can be their own parent (e.g. under dplyr's data masking), so stop
-    # rather than loop if the walk no longer moves outwards.
-    if (parents[i] >= i) break
-    i <- parents[i]
-  }
-  if (i == 0L) globalenv() else sys.frame(i)
 }
 
 #' Check if an object is a mixtime
@@ -207,13 +180,75 @@ is_mixtime <- function(x) {
 #' @method Summary mixtime::mixtime
 #' @export
 `Summary.mixtime::mixtime` <- function(..., na.rm = FALSE) {
-  res <- NextMethod()
-  if (S7_inherits(res, mt_time)) new_mixtime(res) else res
+  if (!.Generic %in% c("min", "max", "range")) {
+    # Durations are magnitudes, so they keep the summaries of their data
+    # (e.g. `sum()`). These aren't meaningful for points in time.
+    is_duration <- function(x) {
+      is_mixtime(x) && all(vapply(x@x, S7_inherits, logical(1L), mt_duration))
+    }
+    if (all(vapply(list(...), is_duration, logical(1L)))) {
+      return(NextMethod())
+    }
+    cli::cli_abort(
+      c(
+        "{.fn {(.Generic)}} is not supported for {.cls mixtime} vectors.",
+        i = "Only {.fn min}, {.fn max} and {.fn range} are defined for time."
+      ),
+      call = NULL
+    )
+  }
+
+  # Combine all inputs into a single (possibly mixed chronon) mixtime.
+  dots <- list(...)
+  if (!is_mixtime(dots[[1L]])) dots[[1L]] <- vec_cast_to_mixtime(dots[[1L]])
+  x <- do.call(c, dots)
+  n_out <- if (.Generic == "range") 2L else 1L
+
+  missing <- is.na(x)
+  if (na.rm) {
+    x <- x[!missing]
+  } else if (any(missing)) {
+    return(vctrs::vec_init(x, n_out))
+  }
+
+  if (!length(x)) {
+    cli::cli_warn(
+      "No non-missing arguments to {.fn {(.Generic)}}; returning {.code NA}.",
+      call = NULL
+    )
+    return(vctrs::vec_init(x, n_out))
+  }
+
+  # Order by time, which handles mixed chronons via a common chronon. Each
+  # result keeps its own chronon (and so time class).
+  ord <- order(x)
+  x[switch(
+    .Generic,
+    min = ord[1L],
+    max = ord[length(ord)],
+    range = ord[c(1L, length(ord))]
+  )]
 }
 
 method(c, class_mixtime) <- function(...) {
   dots <- unname(rlang::list2(...))
   is_mt <- vapply(dots, is_mixtime, logical(1L))
-  dots[!is_mt] <- lapply(dots[!is_mt], vec_cast_to_mixtime, to = new_mixtime())
+  # Cast to the mixtime inputs' type, so numbers join free cyclical time.
+  to <- vctrs::vec_ptype_common(!!!dots[is_mt])
+  dots[!is_mt] <- lapply(dots[!is_mt], vec_cast_to_mixtime, to = to)
   do.call(utils::getS3method("c", "vecvec::vecvec"), dots)
+}
+
+# vecvec stores an assigned value as a new part without casting it, so cast
+# bare numbers to `x`'s type first (e.g. positions of free cyclical time).
+#' @export
+`[<-.mixtime::mixtime` <- function(x, i, ..., value) {
+  if (!is_mixtime(value)) value <- vec_cast_to_mixtime(value, to = vec_ptype(x))
+  NextMethod()
+}
+
+#' @export
+`[[<-.mixtime::mixtime` <- function(x, i, ..., value) {
+  if (!is_mixtime(value)) value <- vec_cast_to_mixtime(value, to = vec_ptype(x))
+  NextMethod()
 }

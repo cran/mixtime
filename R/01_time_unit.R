@@ -29,20 +29,27 @@
 #' @param abstract Logical. If `TRUE` the class cannot be instantiated
 #'   directly; it serves only as a base for further subclassing.
 #' @param constructor A function to use as the class constructor, or `NULL`
-#'   (default) to generate one automatically. The auto-generated constructor
-#'   accepts `...` (forwarded to the parent constructor) plus one argument per
-#'   entry in `properties`, with defaults taken from each property's
-#'   `default` field.
+#'   (default) to let S7 generate one from the parent constructor and properties.
+#'   Custom constructors must accept
+#'   `calendar = attr(sys.function(), "cal")` and forward it to the
+#'   parent constructor as `calendar = calendar` to retain calendar membership.
 #' @param validator A function of one argument (`self`) that returns `NULL`
 #'   when the object is valid, or a character string describing the problem.
 #'   See [S7::new_class()] for details.
 #'
 #' @return An S7 class object, as returned by [S7::new_class()].
 #'
+#' @details
+#' Use `new_time_unit()` for units included in [new_calendar()]. Its generated
+#' constructor records the calendar on each instance, including when the parent
+#' has a custom constructor. A bare `S7::new_class()` constructor may only
+#' forward `...` to its parent and cannot infer the calling calendar.
+#'
 #' @seealso
 #' * [`mt_unit`], [`mt_tz_unit`], [`mt_loc_unit`] for the base classes to
 #'   inherit from.
 #' * [new_calendar()] for assembling time units into a calendar.
+#' * [unit_scheme()] for naming a time unit (e.g. "day", "days" and "D").
 #' * [S7::new_class()] for the underlying S7 class constructor.
 #'
 #' @examples
@@ -68,15 +75,13 @@ new_time_unit <- function(
   constructor = NULL,
   validator = NULL
 ) {
-  if (is.null(constructor)) {
-    props <- syms(names(properties))
-    names(props) <- names(properties)
-    
-    constructor <- rlang::new_function(
-      args = rlang::pairlist2(... =, !!!lapply(properties, `[[`, "default")),
-      body = expr(S7::new_object(parent(!!sym("...")), !!!props))
-    )
+  # The calendar is stored by identifier, so only a new default is retained
+  # from a supplied `calendar` property.
+  calendar <- parent@properties$calendar
+  if (!is.null(properties$calendar)) {
+    calendar$default <- properties$calendar$default
   }
+  properties$calendar <- calendar
 
   S7::new_class(
     name = name,
@@ -89,45 +94,128 @@ new_time_unit <- function(
   )
 }
 
+#' Describe a time unit's naming scheme
+#'
+#' Builds the function a [unit_labels()] method is: assign its result
+#' directly, e.g. `method(unit_labels, granule) <- unit_scheme(...)`. A unit
+#' scheme names a granule itself, e.g. the "month" in "3 months", and is the
+#' single source of truth for every output that renders a count of a unit:
+#' duration formatting and parsing (`dur()` tokens), granule labels
+#' (`format(month(3L))`), tsibble interval displays and messages.
+#'
+#' ```r
+#' method(unit_labels, cal_gregorian$month) <- unit_scheme(
+#'   vocab = vocab_table(`en-GB` = list(wide = "month{?/s}")),
+#'   symbol = "M"
+#' )
+#' ```
+#'
+#' This differs from a [label_scheme()], which labels the *values* of a
+#' granule (e.g. "March" or "2024") rather than the granule itself, but the
+#' two share the same `vocab` and `locale` fields.
+#'
+#' @param vocab A function `function(type = NULL, locale = NULL)` returning
+#'   either the full named list of renderings for one locale (`type = NULL`),
+#'   or one rendering (e.g. `vocab("wide")`), as for a [label_scheme()]. Each
+#'   rendering is a cli-style plural template, e.g. `"day{?/s}"` or
+#'   `"{?zero/one/other}"`. The `"wide"` type gives the unit's full name.
+#'   [vocab_table()] builds this from a plain lookup table.
+#' @param symbol A short identifier for the unit, e.g. `"D"`. It is used as
+#'   the prefix of default format strings, in abbreviated label fallbacks
+#'   (e.g. `"5Y"`) and when parsing durations. Symbols are not localised, and
+#'   should be distinct across units (e.g. `"M"` for month and `"m"` for
+#'   minute).
+#' @param locale A caller-overridable default locale, selecting which
+#'   `vocab()` entry to use by default.
+#'
+#' @return A function `function(granule) list(vocab =, symbol =, locale =)`,
+#'   assignable directly as a [unit_labels()] method. `granule` is only used
+#'   for dispatch: a scheme describes a granule class, not the instance a
+#'   method happens to be called with.
+#'
+#' @seealso [unit_labels()], the generic a scheme is returned from;
+#'   [label_scheme()] for labelling the values of a granule; [vocab_table()]
+#'   for the common hand-listed name table case.
+#'
+#' @examples
+#' scheme <- unit_labels(cal_gregorian$year(1L))
+#' scheme$vocab("wide")
+#' scheme$symbol
+#'
+#' @export
+unit_scheme <- function(vocab, symbol = "", locale = NULL) {
+  fields <- list(
+    vocab = vocab,
+    symbol = symbol,
+    locale = locale
+  )
+  # granule is unused, only here so this can be assigned directly as a
+  # unit_labels() method.
+  function(granule) fields
+}
+
+#' @param granule A time granule instance (e.g. `cal_gregorian$month(1L)`).
+#' @param ... Unused; only present for S7 dispatch.
+#' @rdname unit_scheme
+#' @export
+unit_labels <- S7::new_generic("unit_labels", "granule")
+method(unit_labels, mt_unit) <- unit_scheme(
+  vocab = vocab_table(`en-GB` = list(wide = "unit{?/s}"))
+)
+
 #' Time units as a string
-#' 
-#' These S7 generic functions provide the full and abbreviated names for time
-#' units. `time_unit_full()` is used in messages and durations (e.g., "2 months").
-#' `time_unit_abbr()` is used for tsibble index interval displays (e.g., "1M").
-#' `time_unit_plural()` pluralises the full unit name for a given quantity using
-#' cli-style pluralisation (e.g., `"year{?/s}"` becomes `"year"` or `"years"`).
-#' 
+#'
+#' `r lifecycle::badge("deprecated")`
+#'
+#' These functions are superseded by [unit_labels()] and [unit_scheme()], and
+#' are only kept as thin wrappers for backwards compatibility.
+#' `time_unit_full()` returns the full unit name template (e.g. `"year{?/s}"`),
+#' `time_unit_plural()` pluralises it for a quantity, and `time_unit_abbr()`
+#' returns the unit symbol (e.g. `"Y"`).
+#'
 #' @param x A time granule object (e.g., `cal_gregorian$month(1L)`)
 #' @param n Numeric quantity used to select singular or plural form.
-#' @param ... Additional arguments for methods.
-#' 
+#'
 #' @return A string representing the time unit
-#' 
-#' @examples
-#' time_unit_full(cal_gregorian$year(1L))
-#' time_unit_plural(cal_gregorian$year(1L), 1L)
-#' time_unit_plural(cal_gregorian$year(1L), 2L)
-#' time_unit_abbr(cal_gregorian$year(1L))
-#' 
+#'
+#' @keywords internal
 #' @rdname time_unit_labels
 #' @export
-time_unit_full <- S7::new_generic("time_unit_full", "x")
-method(time_unit_full, mt_unit) <- function(x) "unit{?/s}"
-
-#' @rdname time_unit_labels
-#' @export
-time_unit_plural <- function(x, n = 2L) {
-  str_plural(time_unit_full(x), as.numeric(n))
+time_unit_full <- function(x) {
+  lifecycle::deprecate_soft("0.5.0", "time_unit_full()", "unit_labels()")
+  scheme <- unit_labels(x)
+  scheme$vocab("wide", scheme$locale)
 }
 
 #' @rdname time_unit_labels
 #' @export
-time_unit_abbr <- S7::new_generic("time_unit_abbr", "x")
-method(time_unit_abbr, mt_unit) <- function(x) ""
+time_unit_plural <- function(x, n = 2L) {
+  lifecycle::deprecate_soft("0.5.0", "time_unit_plural()", "unit_labels()")
+  unit_name(x, n)
+}
+
+#' @rdname time_unit_labels
+#' @export
+time_unit_abbr <- function(x) {
+  lifecycle::deprecate_soft("0.5.0", "time_unit_abbr()", "unit_labels()")
+  unit_symbol(x)
+}
+
+# The full name of a unit, pluralised for quantity `n` (e.g. "year", "years").
+# Vectorised over `n`.
+unit_name <- function(x, n = 2L, type = "wide", locale = NULL) {
+  scheme <- unit_labels(x)
+  str_plural(scheme$vocab(type, locale %||% scheme$locale), as.numeric(n))
+}
+
+# The symbol of a unit (e.g. "Y").
+unit_symbol <- function(x) {
+  unit_labels(x)$symbol
+}
 
 # A quantity of a time unit as text, e.g. "15 months". Defaults to describing
 # the granule itself (`month(15L)`), since `mt_unit` objects are S7 scalars
 # which neither paste() nor cli can interpolate directly. Vectorised over `n`.
 time_granule_label <- function(x, n = x@n) {
-  paste(n, time_unit_plural(x, n))
+  paste(n, unit_name(x, n))
 }

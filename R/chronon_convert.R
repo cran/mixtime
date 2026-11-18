@@ -80,7 +80,10 @@ chronon_convert_graph <- function(x, from, to, discrete = FALSE) {
       path[c(-1, -length(path))],
       function(tu) {
         # Ideally inherit from `to`, but if incomplete inherit from `from`
-        granule_inherit_props(granule_inherit_props(tu(1L), to), from)
+        granule_inherit_props(
+          granule_inherit_props(tu(1L, calendar = NULL), to),
+          from
+        )
       }
     )
 
@@ -145,7 +148,7 @@ method(chronon_convert, S7::class_any) <- function(
 ) {
   from <- chronon_glb(x)
   if (!allow_indeterminate) check_convert_determinate(x, from, to)
-  chronon_convert_impl(as.numeric(x), from, to, discrete)
+  chronon_convert_impl(as.numeric(if (S7_inherits(x, mt_time)) vec_data(x) else x), from, to, discrete)
 }
 
 # A discrete time spans its whole chronon, so converting it to a chronon it
@@ -167,3 +170,23 @@ check_convert_determinate <- function(x, from, to) {
     call = NULL
   )
 }
+
+# {zoo} time classes are stored as fractional years (e.g. `2020 + (month-1)/12`)
+# rather than as chronons since the Unix epoch, so they are first converted to
+# the number of months/quarters since 1970. The small offset matches zoo's own
+# rounding (see `zoo::as.yearmon()`) to avoid floating point error at unit
+# boundaries.
+zoo_to_chronons <- function(x, frequency) {
+  floor(frequency * unclass(x) + 1e-3) - 1970 * frequency
+}
+
+chronon_convert_zoo <- function(frequency) {
+  function(x, to, discrete = FALSE, allow_indeterminate = TRUE, ...) {
+    from <- chronon_glb(x)
+    if (!allow_indeterminate) check_convert_determinate(x, from, to)
+    chronon_convert_impl(zoo_to_chronons(x, frequency), from, to, discrete)
+  }
+}
+
+method(chronon_convert, S7::new_S3_class("yearmon")) <- chronon_convert_zoo(12)
+method(chronon_convert, S7::new_S3_class("yearqtr")) <- chronon_convert_zoo(4)

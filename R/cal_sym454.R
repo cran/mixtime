@@ -33,7 +33,7 @@
 #' minutes, 56.5 seconds), intentionally slightly shorter than the mean
 #' northward equinoctial year.
 #'
-#' @return An S3 list of class `c("cal_sym454", "mt_calendar")` containing
+#' @return A calendar (an S7 [`mt_calendar`] object of class `cal_sym454`) containing
 #'   the named time unit classes of the Symmetry454 calendar. Each unit is
 #'   accessible via `$` notation and calling it with a step size produces a
 #'   time granule (e.g., 1 week granule as `cal_sym454$week(1L)`).
@@ -51,18 +51,22 @@
 #' @name calendar_sym454
 #' @export
 cal_sym454 <- new_calendar(
-  year = new_class("tu_sym454_year", parent = mt_tz_unit),
-  month = new_class("tu_sym454_month", parent = mt_tz_unit),
+  year = new_time_unit("tu_sym454_year", parent = mt_tz_unit),
+  month = new_time_unit("tu_sym454_month", parent = mt_tz_unit),
   week = cal_isoweek$week,
   inherit = cal_time_civil,
-  class = "cal_sym454"
+  name = "cal_sym454"
 )
 
 # Time unit labels
-method(time_unit_full, cal_sym454$year) <- function(x) "year{?/s}"
-method(time_unit_abbr, cal_sym454$year) <- function(x) "Y"
-method(time_unit_full, cal_sym454$month) <- function(x) "month{?/s}"
-method(time_unit_abbr, cal_sym454$month) <- function(x) "M"
+method(unit_labels, cal_sym454$year) <- unit_scheme(
+  vocab = vocab_table(`en-GB` = list(wide = "year{?/s}")),
+  symbol = "Y"
+)
+method(unit_labels, cal_sym454$month) <- unit_scheme(
+  vocab = vocab_table(`en-GB` = list(wide = "month{?/s}")),
+  symbol = "M"
+)
 
 ## Default formats
 S7::method(
@@ -75,11 +79,11 @@ S7::method(
 ) <- function(x, cal) "{lin(year(1L))}-{cyc(month(1L), year(1L), label=TRUE, abbreviate=TRUE)}"
 S7::method(
   chronon_format_linear,
-  list(cal_sym454$week, S7::new_S3_class("cal_sym454"))
+  list(cal_sym454$week, S7::S7_class(cal_sym454))
 ) <- function(x, cal) "{lin(year(1L))}-{cyc(month(1L), year(1L), label=TRUE, abbreviate=TRUE)}-W{cyc(week(1L), month(1L))}"
 S7::method(
   chronon_format_linear,
-  list(cal_sym454$day, S7::new_S3_class("cal_sym454"))
+  list(cal_sym454$day, S7::S7_class(cal_sym454))
 ) <- function(x, cal) "{lin(year(1L))}-{cyc(month(1L), year(1L), label=TRUE, abbreviate=TRUE)}-W{cyc(week(1L), month(1L))}-{cyc(day(1L), week(1L), label=TRUE, abbreviate=TRUE)}"
 
 ## Time labels
@@ -108,7 +112,7 @@ method(chronon_parse_linear, list(cal_sym454$month, class_any)) <- function(x, c
 }
 method(
   chronon_parse_linear,
-  list(cal_sym454$day, S7::new_S3_class("cal_sym454"))
+  list(cal_sym454$day, S7::S7_class(cal_sym454))
 ) <- function(x, cal) {
   parse_format(
     # e.g. "2024-Jan-W2-3", "2024 January w2 3rd"

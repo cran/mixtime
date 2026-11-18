@@ -54,7 +54,7 @@
 #' polar night (civil days where sunrise does not occur) are not currently 
 #' supported, it is recommended to use an alternative reference location.
 #' 
-#' @return An S3 list of class `c("cal_time_solar", "mt_calendar")` containing
+#' @return A calendar (an S7 [`mt_calendar`] object of class `cal_time_solar_transit`) containing
 #'   the named time unit classes of the solar transit calendar. Each unit is
 #'   accessible via `$` notation and calling it with a step size and location
 #'   produces a time granule (e.g., 1 solar day granule as
@@ -71,15 +71,16 @@
 #' @name calendar_time_solar
 #' @export
 cal_time_solar_transit <- new_calendar(
-  day = S7::new_class("tu_solar_day", parent = mt_loc_unit),
-  ampm = S7::new_class("tu_solar_ampm", parent = mt_loc_unit),
-  hour = S7::new_class("tu_solar_hour", parent = mt_loc_unit),
-  minute = S7::new_class("tu_solar_minute", parent = mt_loc_unit),
-  second = S7::new_class("tu_solar_second", parent = mt_loc_unit),
-  degree = S7::new_class("tu_solar_degree", parent = mt_loc_unit),
-  arcminute = S7::new_class("tu_solar_arcminute", parent = mt_loc_unit),
-  arcsecond = S7::new_class("tu_solar_arcsecond", parent = mt_loc_unit),
-  illumination = S7::new_class("tu_solar_lum", parent = mt_loc_unit)
+  day = new_time_unit("tu_solar_day", parent = mt_loc_unit),
+  ampm = new_time_unit("tu_solar_ampm", parent = mt_loc_unit),
+  hour = new_time_unit("tu_solar_hour", parent = mt_loc_unit),
+  minute = new_time_unit("tu_solar_minute", parent = mt_loc_unit),
+  second = new_time_unit("tu_solar_second", parent = mt_loc_unit),
+  degree = new_time_unit("tu_solar_degree", parent = mt_loc_unit),
+  arcminute = new_time_unit("tu_solar_arcminute", parent = mt_loc_unit),
+  arcsecond = new_time_unit("tu_solar_arcsecond", parent = mt_loc_unit),
+  illumination = new_time_unit("tu_solar_lum", parent = mt_loc_unit),
+  name = "cal_time_solar_transit"
 )
 
 #' @export
@@ -88,24 +89,42 @@ cal_time_solar <- cal_time_solar_transit
 
 
 # Time unit labels
-method(time_unit_full, cal_time_solar$day) <- function(x) "day{?/s}"
-method(time_unit_abbr, cal_time_solar$day) <- function(x) "D"
-method(time_unit_full, cal_time_solar$ampm) <- function(x) "halfday{?/s}"
-method(time_unit_abbr, cal_time_solar$ampm) <- function(x) "HD"
-method(time_unit_full, cal_time_solar$hour) <- function(x) "hour{?/s}"
-method(time_unit_abbr, cal_time_solar$hour) <- function(x) "h"
-method(time_unit_full, cal_time_solar$minute) <- function(x) "minute{?/s}"
-method(time_unit_abbr, cal_time_solar$minute) <- function(x) "m"
-method(time_unit_full, cal_time_solar$second) <- function(x) "second{?/s}"
-method(time_unit_abbr, cal_time_solar$second) <- function(x) "s"
-method(time_unit_full, cal_time_solar$degree) <- function(x) "degree{?/s}"
-method(time_unit_abbr, cal_time_solar$degree) <- function(x) "\u00b0"
-method(time_unit_full, cal_time_solar$arcminute) <- function(x) "arcminute{?/s}"
-method(time_unit_abbr, cal_time_solar$arcminute) <- function(x) "'"
-method(time_unit_full, cal_time_solar$arcsecond) <- function(x) "arcsecond{?/s}"
-method(time_unit_abbr, cal_time_solar$arcsecond) <- function(x) "\""
-method(time_unit_full, cal_time_solar$illumination) <- function(x) "illumination phase{?/s}"
-method(time_unit_abbr, cal_time_solar$illumination) <- function(x) "I"
+method(unit_labels, cal_time_solar$day) <- unit_scheme(
+  vocab = vocab_table(`en-GB` = list(wide = "day{?/s}")),
+  symbol = "D"
+)
+method(unit_labels, cal_time_solar$ampm) <- unit_scheme(
+  vocab = vocab_table(`en-GB` = list(wide = "halfday{?/s}")),
+  symbol = "HD"
+)
+method(unit_labels, cal_time_solar$hour) <- unit_scheme(
+  vocab = vocab_table(`en-GB` = list(wide = "hour{?/s}")),
+  symbol = "h"
+)
+method(unit_labels, cal_time_solar$minute) <- unit_scheme(
+  vocab = vocab_table(`en-GB` = list(wide = "minute{?/s}")),
+  symbol = "m"
+)
+method(unit_labels, cal_time_solar$second) <- unit_scheme(
+  vocab = vocab_table(`en-GB` = list(wide = "second{?/s}")),
+  symbol = "s"
+)
+method(unit_labels, cal_time_solar$degree) <- unit_scheme(
+  vocab = vocab_table(`en-GB` = list(wide = "degree{?/s}")),
+  symbol = "\u00b0"
+)
+method(unit_labels, cal_time_solar$arcminute) <- unit_scheme(
+  vocab = vocab_table(`en-GB` = list(wide = "arcminute{?/s}")),
+  symbol = "'"
+)
+method(unit_labels, cal_time_solar$arcsecond) <- unit_scheme(
+  vocab = vocab_table(`en-GB` = list(wide = "arcsecond{?/s}")),
+  symbol = "\""
+)
+method(unit_labels, cal_time_solar$illumination) <- unit_scheme(
+  vocab = vocab_table(`en-GB` = list(wide = "illumination phase{?/s}")),
+  symbol = "I"
+)
 
 # Default formats
 method(chronon_format_linear, list(cal_time_solar$day, class_any)) <- function(x, cal) "{lin(day)}"

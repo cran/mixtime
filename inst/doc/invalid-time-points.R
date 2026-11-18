@@ -96,6 +96,24 @@ date("2021-01-31") + months(1L)
 options(mixtime.on_invalid = NULL)
 
 ## -----------------------------------------------------------------------------
+x <- datetime("2026-04-05 01:30:00", tz = "Australia/Melbourne") + hours(c(1L, 2L))
+x
+parts <- time_components(x, d = lin(day), h = cyc(hour, day), m = cyc(minute, hour))
+time_compose(parts$d, parts$h, parts$m)
+
+## -----------------------------------------------------------------------------
+time_compose(parts$d, parts$h, parts$m, offset = tz_offset(x))
+time_compose(parts$d, parts$h, parts$m, offset = c("AEDT", "AEST"))
+
+## -----------------------------------------------------------------------------
+parts <- time_components(x, h = lin(hour), m = cyc(minute, hour))
+time_compose(parts$h, parts$m)
+
+## -----------------------------------------------------------------------------
+parts <- time_components(x, d = lin(day), h = cyc(hour, day), m = cyc(minute, hour))
+time_compose(parts$d, parts$h, parts$m, on_ambiguous = "latest")
+
+## -----------------------------------------------------------------------------
 date("2021-01-31") + months(1L) + months(1L)
 date("2021-01-31") + months(2L)
 

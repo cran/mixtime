@@ -54,8 +54,18 @@
 #'
 #' @details
 #' For linear time types (Date, POSIXct, yearmonth, etc.), sequences progress
-#' forward or backward in time. For cyclical time types (month_of_year,
-#' day_of_week, etc.), sequences wrap around cyclically.
+#' forward or backward in time. Located cyclical time (e.g.
+#' `month_of_year(yearmonth("2024-11"))`) progresses through time too, so its
+#' positions wrap around the cycle.
+#'
+#' Underspecified cyclical time (e.g. `month_of_year(11)`, see
+#' [mt_cyclical_free-arithmetic]) follows the rules of `x + by`: positions in
+#' cycles of a fixed length wrap around (a `length.out` sequence of months
+#' continues from December to January), while cycles of variable length (e.g.
+#' [day_of_month()]) can't be sequenced until located with [time_compose()].
+#' Between `from` and `to`, the sequence runs linearly within one cycle, so
+#' `seq(month_of_year(11), month_of_year(2))` counts down from November to
+#' February.
 #'
 #' Each time point is `from` (or `to`, if `from` is missing) shifted by a whole
 #' number of `by` steps, matching `from + duration(k, by)`. For time-zone-aware times, steps of a day or
@@ -84,8 +94,9 @@
 #' seq(date("2020-01-31"), length.out = 3, by = "1 month", on_invalid = "overflow")
 #'
 #' # Cyclical time sequences
-#' seq(month_of_year(0L), month_of_year(11L))
-#' seq(day_of_week(0L), day_of_week(6L), by = 1)
+#' seq(month_of_year(1L), month_of_year(12L))
+#' seq(day_of_week(1L), day_of_week(7L), by = 1)
+#' seq(month_of_year(11L), by = "1 month", length.out = 4)
 #'
 #' @rdname seq.mixtime
 #' @aliases seq.mixtime
@@ -146,22 +157,24 @@
   # Check that from and to have the same time classes
   if (!missing_from && !missing_to) {
     to_chronon <- chronon_glb(to)
-    if (!identical(chronon, to_chronon)) {
+    if (!granule_identical(chronon, to_chronon)) {
       cli::cli_abort(c(
         "Incompatible time chronons in {.fn seq}.",
         "i" = "{.arg from} has {.cls {time_granule_label(chronon)}} chronons.",
-        "i" = "{.arg to} has {.cls {time_granule_label(to_chronon)}} chronons."
-      ))
+        "i" = "{.arg to} has {.cls {time_granule_label(to_chronon)}} chronons.",
+        "x" = "Which time points of the sequence are within {.arg to} is temporally indeterminate.",
+        "i" = "Convert {.arg from} and {.arg to} to the same chronon (e.g. {.code seq(yearmonth(from), yearmonth(to))})."
+      ), call = NULL)
     }
   }
 
   if (missing_by) {
     arg <- list(length.out = length.out)
     if (!missing_from) {
-      arg$from <- as.numeric(from)
+      arg$from <- as.numeric(vec_data(from))
     }
     if (!missing_to) {
-      arg$to <- as.numeric(to)
+      arg$to <- as.numeric(vec_data(to))
     }
     return(vec_restore(rlang::exec(seq.int, !!!arg), ptype))
   }
@@ -171,7 +184,7 @@
     cli::cli_abort("{.var by} must be a single time duration", call. = FALSE)
   }
   if (time_is_duration(by)) {
-    by_size <- as.numeric(by)
+    by_size <- as.numeric(vec_data(by))
     by <- attr(by, "chronon")
     by@n <- by@n * by_size
   }
@@ -182,7 +195,7 @@
   }
   # Numeric `by` uses chronon
   if (is.numeric(by) && !S7_inherits(by, mt_unit)) {
-    by <- S7::S7_class(chronon)(by)
+    by <- S7::set_props(chronon, n = by)
   }
 
   # Inherit granule properties from `by` if not given in `chronon` granule
@@ -206,9 +219,9 @@
   # Each time point is shifted from an anchor by a whole number of `by` units
   # (`anchor + duration(k, by)`), rather than from the previous time point.
   # The anchor is `from`, or `to` (right aligned) if `from` is missing.
-  anchor <- as.numeric(ptype)
+  anchor <- as.numeric(vec_data(ptype))
   if (!missing_to) {
-    to <- as.numeric(to)
+    to <- as.numeric(vec_data(to))
   }
   local_chronon <- chronon_in_context(chronon, by)
   k <- if (missing_from) {
@@ -250,8 +263,8 @@
 
   if (missing_on_invalid && any(shifted$invalid & !shifted$skipped)) {
     cli::cli_warn(c(
-      "Some time points in the sequence fall past the end of a shorter {time_unit_plural(by, 1L)}.",
-      "!" = "Clamping them to the last valid time point in that {time_unit_plural(by, 1L)}, {.code on_invalid = \"clamp\"} (the default).",
+      "Some time points in the sequence fall past the end of a shorter {unit_name(by, 1L)}.",
+      "!" = "Clamping them to the last valid time point in that {unit_name(by, 1L)}, {.code on_invalid = \"clamp\"} (the default).",
       "i" = "Specify {.arg on_invalid}, or set the {.code mixtime.on_invalid} option, to suppress this warning."
     ))
   }

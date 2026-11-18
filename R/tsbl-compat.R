@@ -31,7 +31,7 @@ method(interval_pull, mt_time) <- function(x) {
   chronon <- attr(x, "chronon")
 
   interval <- list(chronon@n)
-  names(interval) <- time_unit_plural(chronon, 1L)
+  names(interval) <- unit_name(chronon, 1L)
 
   rlang::inject(tsibble::new_interval(!!!interval))
 }
@@ -73,19 +73,4 @@ print.mixtime_interval <- function(x, ...) cat(format(x, ...))
 vec_proxy.mixtime_interval <- function(x, ...) {
   # Bypass tsibble:::unknown_interval length 1 checks
   apply(new_data_frame(x), 2, sum, simplify = FALSE)
-}
-
-#' @export
-vec_cast.mixtime.yearweek <- function(x, to, ...) {
-  yearweek(as.Date(x))
-}
-
-#' @export
-vec_cast.mixtime.yearmonth <- function(x, to, ...) {
-  yearmonth(as.Date(x))
-}
-
-#' @export
-vec_cast.mixtime.yearquarter <- function(x, to, ...) {
-  yearquarter(as.Date(x))
 }

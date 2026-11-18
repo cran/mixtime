@@ -51,9 +51,48 @@ new_cyclical_time_fn <- function(chronon, cycle, default_calendar = cal_gregoria
 #' positions within repeating cycles. This function is useful for creating custom
 #' cyclical time representations that aren't covered by the convenience functions
 #' like [day_of_week()] or [month_of_year()].
+#'
+#' @section Located and underspecified cyclical time:
+#' A cyclical time point is a position within a cycle, such as March within a
+#' year. The cycle it falls in (which year) is its *enclosing cycle*, and
+#' whether that is known gives two types of cyclical time:
+#'
+#' - **Located** cyclical time knows its enclosing cycle. It is created from
+#'   time points: `month_of_year(as.Date("2024-03-15"))` is March 2024,
+#'   displayed as `Mar`.
+#' - **Underspecified** cyclical time doesn't. It is created from positions:
+#'   `month_of_year(3)` is March of any year.
+#'
+#' Both compare and sort by their position within the cycle, so
+#' `month_of_year(3) == month_of_year(as.Date("2024-03-15"))` is `TRUE`.
+#'
+#' They differ in operations that move a position. Located cyclical time moves
+#' its underlying time point, so the result accounts for the enclosing cycle:
+#' adding a day to `day_of_month(as.Date(c("2023-02-28", "2024-02-28")))` gives
+#' `D01 D29`.
+#'
+#' Underspecified cyclical time only supports operations that don't need its
+#' enclosing cycle, and which those are depends on the cycle's length:
+#'
+#' - **Fixed-length cycles** (e.g. months of the year, days of the week) wrap
+#'   around: `month_of_year(12) + 1` is `Jan`.
+#' - **Variable-length cycles** (e.g. days of the month or year) can't be
+#'   moved: `day_of_month(28) + 1` is day 29, or day 1 of a non-leap February,
+#'   so it is an error. Positions are only checked against the longest cycle,
+#'   so `day_of_month(31)` is valid but `day_of_month(32)` is `NA`.
+#'
+#' Locate underspecified cyclical time in a specific enclosing cycle with
+#' [time_compose()]: adding a day to
+#' `time_compose(yearmonth("2024-02"), day_of_month(28))` gives 2024-02-29.
+#' The two types can't be cast into each other.
+#' See [mt_cyclical_free-arithmetic] and [mt_cyclical_free-compare] for details.
 #' 
 #' @param data Input data to convert to cyclical time. Can be:
-#'   - Numeric values (interpreted as chronons, 1-indexed)
+#'   - Numeric values: underspecified cyclical time (positions with no
+#'     enclosing cycle), counted the way the chronon is
+#'     displayed (e.g. `3` is March for months of the year, `0` is midnight
+#'     for seconds of the day). Positions beyond the longest possible cycle
+#'     (e.g. day 32 of a month) are `NA`.
 #'   - Character strings (parsed as dates/times)
 #'   - Date or POSIXct objects
 #'   - Other time objects
@@ -71,7 +110,8 @@ new_cyclical_time_fn <- function(chronon, cycle, default_calendar = cal_gregoria
 #'   Defaults to `time_calendar(data)` for existing time objects. Common options
 #'   include [cal_gregorian] and [cal_isoweek].
 #' 
-#' @return A `mixtime` time vector containing an `mt_cyclical` vector.
+#' @return A `mixtime` time vector of located cyclical time (`mt_cyclical`),
+#'   or underspecified cyclical time (`mt_cyclical_free`) for numeric `data`.
 #' 
 #' @seealso 
 #' - [new_cyclical_time_fn()] for creating reusable cyclical time functions
@@ -117,6 +157,13 @@ new_cyclical_time_fn <- function(chronon, cycle, default_calendar = cal_gregoria
 #'   chronon = second(1L),
 #'   cycle = day(1L)
 #' )
+#' #' # Underspecified cyclical time from positions
+#' month_of_year(c(3, 12)) + 1
+#' try(day_of_month(28) + 1)
+#' time_compose(yearmonth("2024-02"), day_of_month(28)) + days(1)
+#'
+#' # Located cyclical time moves with its enclosing cycle
+#' day_of_month(as.Date(c("2023-02-28", "2024-02-28"))) + days(1)
 #' 
 #' @export
 cyclical_time <- function(
@@ -141,15 +188,49 @@ cyclical_time <- function(
     cli::cli_abort(e$message, call = NULL)
   })
 
-  # Make numeric data input 1-indexed
-  # if (is.numeric(data)) data <- data - 1L
-  # TODO - numeric data should default to origin-less cyclical time
-
+  # A bare number has no enclosing cycle, so it builds mt_cyclical_free, not mt_cyclical.
+  # An all-NA logical (e.g. `month_of_year(NA)`) is a missing bare number.
+  if (is.logical(data) && all(is.na(data)) && is.null(attributes(data))) {
+    data <- rep(NA_integer_, length(data))
+  }
+  if (!is_mixtime(data) && !S7_inherits(data, mt_time) && is.numeric(data)) {
+    if (discrete) data <- as.integer(round(data)) else data <- as.double(data)
+    ptype <- mt_cyclical_free(data[0L], chronon = chronon, cycle = cycle)
+    return(new_mixtime(free_from_position(data, ptype)))
+  }
 
   mixtime(data, chronon = chronon, cycle = cycle, discrete = discrete)
+}
 
-  # TODO - For origin-less cyclical time, reduce to cyclical time with divmod methods
-  # data <- chronon_divmod(from = chronon, to = cycle, x = data)$mod
+# Read 1-indexed bare positions (e.g. 3 is March) into a free value like
+# `ptype`, as `cyclical_time()` does. Positions follow the chronon's own label
+# scheme (e.g. day_of_year(60) is the 60th day, time_of_day(0) is midnight),
+# and those outside the cycle become NA.
+free_from_position <- function(x, ptype) {
+  chronon <- attr(ptype, "chronon")
+  cycle <- attr(ptype, "cycle")
+  x <- x - cyclical_labels(chronon, cycle)$start
+  card <- cyclical_cardinality_max(chronon, cycle)
+  if (!is.null(card)) {
+    x[!is.na(x) & (x < 0 | x >= card)] <- NA
+  }
+  attributes(x) <- attributes(ptype)
+  x
+}
+
+# The most `chronon`s a `cycle` can hold: its fixed cardinality, or for a
+# variable-length cycle the largest over many cycles (e.g. 31 days in
+# a month, 366 days in a year, 53 ISO weeks in a year). NULL if unknown.
+cyclical_cardinality_max <- function(chronon, cycle) {
+  if (chronon_cardinality_is_fixed(chronon, cycle)) {
+    return(tryCatch(chronon_cardinality(chronon, cycle), error = function(e) NULL))
+  }
+  # 4800 consecutive cycles span every Gregorian leap pattern (400 years) even
+  # for monthly cycles.
+  tryCatch(
+    max(chronon_cardinality(chronon, cycle, at = seq.int(-2400L, 2399L))),
+    error = function(e) NULL
+  )
 }
 
 # #' @importFrom vctrs vec_arith

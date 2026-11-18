@@ -43,13 +43,31 @@ mt_unit_display <- function(x, units, parts, ...) {
   }
 }
 
-# Decodes one mt_glue_fmt() `{lin(...)}`/`{cyc(...)}` token with attributes
+# Decodes one mt_glue_fmt() `{lin(...)}`/`{cyc(...)}`/`{dur(...)}` token with attributes
 format_token_spec <- function(tok) {
   list(
     chronon = tok[[1L]],
     cycle = if (length(tok) == 2L) tok[[2L]] else NULL,
-    attrs = attributes(tok) %||% list()
+    attrs = attributes(tok)[setdiff(names(attributes(tok)), "class")] %||% list()
   )
+}
+
+# Formats duration `x` for a `{dur(...)}` token, in units of the token's granule.
+format_duration_token <- function(tok, x) {
+  if (!S7_inherits(x, mt_duration)) {
+    cli::cli_abort(
+      c(
+        "{.fn dur} can only format durations.",
+        i = "Use {.fn lin} or {.fn cyc} to format time points."
+      ),
+      call = NULL
+    )
+  }
+  spec <- format_token_spec(tok)
+  duration_check_locale(spec$attrs$locale)
+  if (length(x) == 0L) return(character())
+  discrete <- is.integer(vec_data(x))
+  duration_label(duration(x, spec$chronon, discrete = discrete)@x[[1L]])
 }
 
 time_format_default <- function(x, attr = TRUE) {
@@ -124,6 +142,10 @@ time_format_impl <- function(x, format = time_format_default(x, attr = attr), ..
   )
 
   fmt <- mt_glue_fmt(format, env = env)
+
+  # Render {dur(...)} tokens directly, since durations have no calendar parts.
+  fmt_dur <- vapply(fmt, inherits, logical(1L), "mt_dur_spec")
+  fmt[fmt_dur] <- lapply(fmt[fmt_dur], format_duration_token, x = x[!x_special])
   fmt_parts <- vapply(fmt, is.list, logical(1L))
 
   # Resolve bare S7 class tokens (e.g. from {year}, {month}, {day}) into
@@ -211,26 +233,141 @@ time_format_impl <- function(x, format = time_format_default(x, attr = attr), ..
 #' Format mixtime vectors
 #'
 #' Formats a mixtime vector as a character vector, using a glue-style format
-#' string of `{lin(...)}`/`{cyc(...)}` tokens tailored to the vector's chronon
+#' string of `{lin(...)}`/`{cyc(...)}` (or, for durations, `{dur(...)}`) tokens tailored to the vector's chronon
 #' and cycle. If `format` is omitted, a sensible default is derived
 #' automatically. See `vignette("time-format-strings")` for the format string
 #' syntax.
 #'
+#' @section Underspecified cyclical time:
+#' Underspecified cyclical time (e.g. `month_of_year(3)`) has no position on
+#' the time line, so only `{cyc(...)}` tokens can be used. Attribute tokens
+#' such as `{tz(.time)}` render as empty text.
+#'
 #' @param x A mixtime vector.
-#' @param ... Additional arguments for methods, including `format`: a
-#'   glue-style format string, defaulting to one derived automatically for `x`.
+#' @param format A glue-style format string, defaulting to one derived
+#'   automatically for `x`. For time points it is passed via `...`.
+#' @param ... Additional arguments for methods, including `format` for time
+#'   points.
 #' @param attr If `TRUE` (default), append attribute information (e.g.
 #'   timezone) to the default format.
 #'
 #' @return A character vector the same length as `x`.
 #'
+#' @examples
+#' format(yearmonth("2024-03"))
+#' format(date("2024-03-15"), format = "{cyc(day(1L), month(1L))} {lin(year(1L))}")
+#' format(month_of_year(3))
+#'
 #' @usage
 #' \S4method{format}{mt_time}(x, ..., attr = TRUE)
-#' @aliases format,mt_time-method
+#' \S4method{format}{mt_cyclical_free}(x, format = NULL, ..., attr = TRUE)
+#' @aliases format,mt_time-method format,mt_cyclical_free-method format.mt_cyclical_free
 #' @name format.mt_time
 #' @export
 S7::method(format, mt_time) <- function(x, ..., attr = TRUE) {
   time_format_impl(x, ..., attr = attr)
+}
+
+#' @rdname format.mt_time
+#' @export
+S7::method(format, mt_cyclical_free) <- function(x, format = NULL, ..., attr = TRUE) {
+  chronon <- base::attr(x, "chronon")
+  cycle <- base::attr(x, "cycle")
+  v <- vec_data(x)
+  special <- is.na(x) | is.infinite(v)
+  n <- sum(!special)
+
+  out <- character(length(x))
+  out[special] <- base::format(v[special])
+
+  if (n > 0L) {
+    fmt_str <- format %||% paste0(
+      chronon_format_cyclical(chronon, cycle),
+      if (attr) chronon_format_attr(chronon)
+    )
+    calendar <- time_calendar(cycle)
+    # Templates call package internals (e.g. chronon_glb()), so evaluate them
+    # in the package namespace rather than the (possibly unattached) caller's.
+    env <- rlang::new_environment(
+      data = c(
+        component_mask(calendar, chronon),
+        list(
+          lin = function(...) {
+            cli::cli_abort(
+              c(
+                "Can't format underspecified cyclical time with {.code {{lin()}}}.",
+                i = "It has no enclosing cycle to locate it on the time line, so use {.code {{cyc()}}} tokens."
+              ),
+              call = NULL
+            )
+          },
+          # A free value has no time zone or location to show.
+          tz = function(x) "",
+          loc = function(x) "",
+          frac = function(x) {
+            x <- round_ulp(vec_data(x))
+            sprintf("%.1f%%", (x - floor(x)) * 100)
+          },
+          .time = x
+        )
+      ),
+      parent = topenv()
+    )
+    fmt <- mt_glue_fmt(fmt_str, env = env)
+    fmt_parts <- vapply(fmt, is.list, logical(1L))
+    if (!all(fmt_parts | vapply(fmt, is.character, logical(1L)))) {
+      cli::cli_abort(
+        c(
+          "Bare time granule tokens are not supported in format strings.",
+          i = "Use {.fn cyc} for cyclical units, e.g. {.code {{cyc(month, year)}}}."
+        ),
+        call = NULL
+      )
+    }
+    specs <- lapply(fmt[fmt_parts], format_token_spec)
+    token_values <- free_cyclical_token_values(v[!special], chronon, cycle, specs)
+
+    # A literal fragment repeats; a {cyc(...)} token renders its decomposed value.
+    ti <- 0L
+    pieces <- lapply(seq_along(fmt), function(i) {
+      if (!fmt_parts[[i]]) {
+        piece <- fmt[[i]]
+        return(if (length(piece) == length(x)) piece[!special] else rep_len(piece, n))
+      }
+      ti <<- ti + 1L
+      spec <- specs[[ti]]
+      rlang::exec(
+        cyclical_labels_format,
+        spec$chronon, spec$cycle %||% cycle, token_values[[ti]],
+        at = NULL, !!!spec$attrs
+      )
+    })
+    out[!special] <- trimws(rlang::exec(paste0, !!!pieces))
+  }
+  out
+}
+
+# Split `v` (a count of `own_chronon`s) across a template's {cyc(...)} tokens,
+# coarsest-to-finest, via chronon_cardinality() only - never chronon_divmod().
+# The count is first rescaled to the finest token's chronon (e.g. 47 chronons
+# of 30 minutes are 1410 minutes). The coarsest token keeps the leftover.
+free_cyclical_token_values <- function(v, own_chronon, own_cycle, specs) {
+  n <- length(specs)
+  out <- vector("list", n)
+  if (n == 0L) return(out)
+  scale <- chronon_cardinality(specs[[n]]$chronon, own_chronon)
+  remaining <- if (scale == 1) v else floor(round_ulp(v * scale))
+  for (i in rev(seq_len(n))) {
+    if (i == 1L) {
+      out[[i]] <- remaining
+    } else {
+      spec <- specs[[i]]
+      card <- chronon_cardinality(spec$chronon, spec$cycle %||% own_cycle)
+      out[[i]] <- remaining %% card
+      remaining <- remaining %/% card
+    }
+  }
+  out
 }
 
 #' @export
@@ -260,6 +397,11 @@ S7::method(str, mt_cyclical) <- function(object, ..., vec.len = getOption("str")
 #' @export
 S7::method(str, mt_duration) <- function(object, ..., vec.len = getOption("str")$vec.len %||% 4L) {
   cat("duration<", format(time_chronon(object)[1L]), "> [1:", length(object), "] ", .mt_str_values(object, vec.len), "\n", sep = "")
+}
+
+#' @export
+S7::method(str, mt_cyclical_free) <- function(object, ..., vec.len = getOption("str")$vec.len %||% 4L) {
+  cat("free_cyclical<", format(time_chronon(object)[1L]), "/", format(time_cycle(object)[1L]), "> [1:", length(object), "] ", .mt_str_values(object, vec.len), "\n", sep = "")
 }
 
 .mt_str_values <- function(x, vec_len) {

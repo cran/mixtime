@@ -9,10 +9,11 @@
 #' 
 #' @param x The finer time granule (e.g. `cal_gregorian$month(1L)`)
 #' @param y The coarser time granule (e.g. `cal_gregorian$year(1L)`)
+#' @param at Optional time point for context-dependent cardinality. Either a
+#' time point (e.g. a `yearmonth()` or `Date`), which is converted to the `y`
+#' chronon containing it, or the number of `y` chronons since the epoch. If `y`
+#' is omitted, the chronon of `at` is used.
 #' @param ... Additional arguments for methods.
-# #' @param at Optional time point for context-dependent cardinality, defined in
-# #' terms of `y` (e.g., if `y` is `month()`, then `at` could be a 
-# #' `yearmonth()`)
 #'
 #' @return Numeric describing how many `x` time granules fit into `y` at time `at`.
 #' 
@@ -45,24 +46,31 @@
 #' 
 #' # There are 365 days in 2025 (a common year)
 #' chronon_cardinality(
-#'   cal_gregorian$day(1L), cal_gregorian$year(1L),
-#'   at = year(as.Date("2025-01-01"))
+#'   cal_gregorian$day(1L), at = year(as.Date("2025-01-01"))
 #' )
 #' 
 #' # There are 366 days in 2024 (a leap year)
 #' chronon_cardinality(
-#'   cal_gregorian$day(1L), cal_gregorian$year(1L), 
-#'   at = mixtime::year(as.Date("2024-01-01"))
+#'   cal_gregorian$day(1L), at = year(as.Date("2024-01-01"))
 #' )
 #' 
 #' # There are 29 days in February 2024 (a leap year)
 #' chronon_cardinality(
-#'   cal_gregorian$day(1L), cal_gregorian$month(1L), 
-#'   at = yearmonth(as.Date("2024-02-01"))
+#'   cal_gregorian$day(1L), at = yearmonth(as.Date("2024-02-01"))
 #' )
 #'
 #' @export
-chronon_cardinality <- S7::new_generic("chronon_cardinality", c("x", "y"))
+chronon_cardinality <- S7::new_generic(
+  "chronon_cardinality", c("x", "y"), 
+  function(x, y = chronon_glb(at), at = NULL, ...) {
+    # Convert time points to the `y` chronon containing them
+    if (is.object(at) && (inherits(at, c("Date", "POSIXt")) ||
+        S7_inherits(at, mt_linear) || S7_inherits(at, class_mixtime))) {
+      at <- chronon_convert(at, y, discrete = TRUE, allow_indeterminate = FALSE)
+    }
+    S7::S7_dispatch()
+  }
+)
 
 #' Fixed cardinality between time granules
 #'
@@ -94,52 +102,88 @@ chronon_cardinality_fixed <- S7::new_generic(
   function(x, y, ...) S7::S7_dispatch() * y@n / x@n
 )
 
+#' Test whether the cardinality between time granules is fixed
+#'
+#' Tests whether the number of `x` time granules in a `y` time granule is a
+#' constant (e.g. 12 months in a year, 24 hours in a day), or instead depends
+#' on where in time it is measured (e.g. 28 to 31 days in a month, 52 or 53
+#' weeks in a year). A fixed cardinality can be found with
+#' [chronon_cardinality()] alone, while an irregular one also needs a time
+#' point `at`.
+#'
+#' The cardinality is fixed when the granules are of the same time unit, or are
+#' connected only by [chronon_cardinality_fixed()] relationships. Granules with
+#' no relationship between them don't have a fixed cardinality.
+#'
+#' @inheritParams chronon_cardinality
+#'
+#' @return A single logical value.
+#'
+#' @examples
+#' # There are always 12 months in a year
+#' with(cal_gregorian, chronon_cardinality_is_fixed(month(1L), year(1L)))
+#'
+#' # The number of days in a month varies
+#' with(cal_gregorian, chronon_cardinality_is_fixed(day(1L), month(1L)))
+#'
+#' # The order of the granules doesn't matter
+#' with(cal_gregorian, chronon_cardinality_is_fixed(day(1L), hour(1L)))
+#'
+#' @export
+chronon_cardinality_is_fixed <- function(x, y) {
+  S7_class_id(x) == S7_class_id(y) ||
+    chronon_fixed_reachable(x, y) ||
+    chronon_fixed_reachable(y, x)
+}
+
 # #' @rdname chronon_cardinality
-method(chronon_cardinality, list(mt_unit, mt_unit)) <- function(x, y, at = NULL) {
+method(chronon_cardinality, list(mt_unit, mt_unit)) <- function(x, y, at = NULL, ...) {
   # Check if x and y are the same class
   if (S7_class_id(x) == S7_class_id(y)) {
     return(y@n/x@n)
   }
 
   # Use a registered fixed-cardinality method if available.
-  if (!is.null(chronon_cardinality_fixed@methods[[S7_class_id(x)]][[S7_class_id(y)]])) {
+  if (chronon_has_method(chronon_cardinality_fixed, x, y)) {
     return(chronon_cardinality_fixed(x, y))
   }
-  if (!is.null(chronon_cardinality_fixed@methods[[S7_class_id(y)]][[S7_class_id(x)]])) {
+  if (chronon_has_method(chronon_cardinality_fixed, y, x)) {
     return(1 / chronon_cardinality_fixed(y, x))
   }
 
   # Try to find a method with arguments swapped
-  # (This feels unsafe for finding exact matching of S7 dispatch.)
-
-  if (!is.null(y_env <- chronon_cardinality@methods[[S7_class_id(y)]])) {
-    if (S7_class_id(x) %in% names(y_env)) {
-      # Matching inverse method found, use it with inversion.
-      # TODO: Convert at to x units?
-      return(1/chronon_cardinality(y, x, at = at))
-    }
+  if (chronon_has_method(chronon_cardinality, y, x)) {
+    # Matching inverse method found, use it with inversion.
+    # TODO: Convert at to x units?
+    return(1 / chronon_cardinality(y, x, at = at, ...))
   }
 
   # No specific method defined between these classes
   # Attempt graph traversal to find a sequence of methods
-  path <- S7_graph_dispatch(chronon_cardinality_graph(), y, x)
+  # Cardinality is only meaningful when one unit nests within the other, so
+  # only monotone paths are used. Units that are neither finer nor coarser
+  # than each other (e.g. weeks and months) are only connected via a common
+  # finer unit, so their ratio isn't a count.
+  path <- S7_graph_dispatch(chronon_cardinality_graph(), y, x, monotone = TRUE)
+  if (is.null(path)) {
+    check_cardinality_comparable(x, y)
+  }
 
   path[[1]] <- y
   path[[length(path)]] <- x
   # Initialise intermediate classes with 1L and adjacent properties
   path[c(-1, -length(path))] <- lapply(path[c(-1, -length(path))], function(tu){
     # Ideally inherit from `x`, but if incomplete inherit from `y`
-    granule_inherit_props(granule_inherit_props(tu(1L), x), y)
+    granule_inherit_props(granule_inherit_props(tu(1L, calendar = NULL), x), y)
   })
   
   result <- path[[1]]
   for (i in seq(2, length.out = length(path)-1)) {
     ## QUESTION: Why does this not work with `generic` instead of `chronon_cardinality`? S7 bug?
 
-    result <- chronon_cardinality(path[[i]], result, at)
-    if (!is.null(at)) at <- at * result
+    result <- chronon_cardinality(path[[i]], result, at, ...)
     # Class the result with the next class in the path
-    result <- S7::S7_class(path[[i]])(result)
+    result <- S7::set_props(path[[i]], n = result)
   }
 
   result@n
@@ -160,10 +204,10 @@ method(chronon_cardinality_fixed, list(mt_unit, mt_unit)) <- function(x, y) {
 
   result <- 1
   for (i in seq(2, length.out = length(path) - 1)) {
-    fine <- path[[i]](1L)
-    coarse <- path[[i - 1]](1L)
+    fine <- path[[i]](1L, calendar = x@calendar)
+    coarse <- path[[i - 1]](1L, calendar = y@calendar)
     # Allow the fixed cardinality method to be defined in either direction.
-    result <- result * if (is.null(chronon_cardinality_fixed@methods[[S7_class_id(fine)]][[S7_class_id(coarse)]])) {
+    result <- result * if (!chronon_has_method(chronon_cardinality_fixed, fine, coarse)) {
       1 / chronon_cardinality_fixed(coarse, fine)
     } else {
       chronon_cardinality_fixed(fine, coarse)
@@ -171,6 +215,22 @@ method(chronon_cardinality_fixed, list(mt_unit, mt_unit)) <- function(x, y) {
   }
   result
 }
+
+# Errors for units that neither nest within each other, distinguishing these
+# from units that aren't connected by any registered methods.
+check_cardinality_comparable <- function(x, y) {
+  # Unconnected units get S7_graph_dispatch()'s more specific error.
+  S7_graph_dispatch(chronon_cardinality_graph(), y, x)
+  cli::cli_abort(
+    c(
+      "Cannot compute the number of {unit_name(x)} in {unit_name(y)}.",
+      "x" = "Neither unit is finer than the other, so they don't nest within each other.",
+      "i" = "Use a common finer unit instead, such as {unit_name(chronon_glb_impl(list(x, y)))}."
+    ),
+    call = NULL
+  )
+}
+
 # Irregular cardinalities depend on where in time they're measured. Without a
 # time point `at` (e.g. when converting a duration, which has no position)
 # there is nothing to measure against, so error rather than guess.
@@ -179,7 +239,7 @@ check_cardinality_at <- function(at, x, y) {
     stop(
       sprintf(
         "The number of %s in %s requires the time context `at`.",
-        time_unit_plural(x), time_unit_plural(y)
+        unit_name(x), unit_name(y)
       ),
       call. = FALSE
     )

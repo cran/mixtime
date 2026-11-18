@@ -21,39 +21,72 @@ vec_ptype2_mixtime <- function(x, y, ...) {
   if (!(x_is_time && y_is_time) && !(is.numeric(x) || is.numeric(y))) {
     vctrs::stop_incompatible_type(x, y, x_arg = "", y_arg = "")
   }
+
+  # Mixtime vectors hold differing time types side by side, so their common
+  # type keeps every part type (see `vec_ptype_mixtime()`).
+  if (is_mixtime(x) && is_mixtime(y)) {
+    return(class_mixtime(x = c(x@x, y@x), i = integer()))
+  }
+
+  # Numbers combined with free cyclical time are positions in its cycle.
+  if (is_mixtime(x) && is_bare_numeric(y)) return(mixtime_free_ptype(x) %||% new_mixtime())
+  if (is_mixtime(y) && is_bare_numeric(x)) return(mixtime_free_ptype(y) %||% new_mixtime())
   new_mixtime()
 }
 
+# The prototype of a mixtime keeps the (empty) types of its parts, so that
+# vec_ptype2() can tell which types are being combined.
+vec_ptype_mixtime <- function(x, ..., x_arg = "") {
+  class_mixtime(x = lapply(x@x, vec_ptype), i = integer())
+}
+
 vec_cast_to_mixtime <- function(x, to, ...) {
+  if (is_bare_numeric(x) && !is.null(free <- mixtime_free_part(to))) {
+    return(new_mixtime(vec_cast(x, free)))
+  }
   mixtime(x)
+}
+
+is_bare_numeric <- function(x) is.numeric(x) && !is.object(x)
+
+# The common free cyclical part type of a mixtime made only of free cyclical
+# time, or NULL if it has other (or incompatible) parts.
+mixtime_free_part <- function(x) {
+  if (!is_mixtime(x) || !length(x@x)) return(NULL)
+  if (!all(vapply(x@x, S7_inherits, logical(1L), mt_cyclical_free))) return(NULL)
+  tryCatch(
+    Reduce(vec_ptype2, lapply(x@x, vec_ptype)),
+    vctrs_error_incompatible_type = function(e) NULL
+  )
+}
+
+# An empty mixtime prototype holding that free cyclical part type.
+mixtime_free_ptype <- function(x) {
+  free <- mixtime_free_part(x)
+  if (is.null(free)) return(NULL)
+  new_mixtime(free)
+}
+
+# Mixtime vectors hold their parts side by side, so casting between them is
+# usually a no-op. Underspecified and located time can't stand in for each other, so a
+# cast that would leave them in place of the other is an error.
+vec_cast_mixtime_mixtime <- function(x, to, ..., x_arg = "", to_arg = "") {
+  if (!length(to@x) || !length(x@x)) return(x)
+  parts_are <- function(v, cls) vapply(v@x, S7_inherits, logical(1L), cls)
+  x_free <- parts_are(x, mt_cyclical_free)
+  if ((all(parts_are(to, mt_cyclical_free)) && !all(x_free)) ||
+      (all(parts_are(to, mt_cyclical)) && any(x_free))) {
+    vctrs::stop_incompatible_cast(
+      x, to, x_arg = x_arg, to_arg = to_arg,
+      details = free_incompatible_details
+    )
+  }
+  x
 }
 
 #' @importFrom vctrs vec_proxy_order
 method(vec_proxy_order, class_mixtime) <- function(x, ...) {
-  mode <- check_common_time_mode(x)
-  if (!length(x@x)) return(vec_proxy_order(vecvec::unvecvec(x)))
-
-  # The granules each part is reduced to, read before converting the parts below
-  # replaces them with bare chronon counts carrying neither granule.
-  chronon <- chronon_glb_impl(lapply(x@x, function(v) attr(v, "chronon")))
-  cycle <- if (identical(mode, "cyclical")) check_common_cycle(x)
-
-  # Convert all time values to a common chronon, which a single part already is
-  if (length(x@x) > 1L) {
-    x@x <- lapply(x@x, function(v) {
-      if (is.integer(v)) v <- v + 0.5
-      chronon_convert(v, chronon)
-    })
-  }
-
-  if (!is.null(cycle)) {
-    # Cyclical values order by their position within the cycle, matching `==`
-    # and `<` on `mt_cyclical` (see `mt_cyclical-compare`) rather than the
-    # absolute chronon count stored underneath.
-    x@x <- lapply(x@x, function(v) cyclical_position(vec_data(v), chronon, cycle))
-  }
-
-  vec_proxy_order(vecvec::unvecvec(x))
+  mixtime_order_proxy(x)
 }
 
 #' @importFrom vctrs vec_proxy_equal
@@ -80,6 +113,8 @@ method(vec_proxy_equal, class_mixtime) <- function(x, ...) {
 
 # --- casts from a time vector to a base type ---
 mt_cast_to_character <- function(x, to, ...) time_format_impl(x)
+# mt_cyclical_free has its own format() method instead - never time_format_impl().
+mt_cast_to_character_free <- function(x, to, ...) format(x)
 mt_cast_to_integer <- function(x, to, ...) vec_cast(vec_data(x), integer())
 mt_cast_to_double <- function(x, to, ...) vec_cast(vec_data(x), double())
 mt_cast_to_Date <- function(x, to, ...) {
@@ -91,6 +126,12 @@ mt_cast_to_POSIXct <- function(x, to, ...) {
 }
 
 # --- casts from a base type to a time vector ---
+# Numbers are positions within the cycle, read as cyclical_time() reads them.
+mt_cast_from_numeric_free <- function(x, to, ..., x_arg = "", to_arg = "") {
+  x <- vec_cast(x, vec_ptype(vec_data(to)), x_arg = x_arg, to_arg = to_arg)
+  free_from_position(x, to)
+}
+
 mt_cast_from_numeric <- function(x, to, ...) {
   # Bare numbers are read as `mixtime()` reads them, so a time point counts from
   # its chronon's epoch (e.g. 2026 is the year 2026). Durations have no epoch.
@@ -103,7 +144,7 @@ mt_cast_from_numeric <- function(x, to, ...) {
 }
 
 mt_cast_from_character <- function(x, to, ...) {
-  cycle <- if (S7_inherits(to, mt_cyclical)) attr(to, "cycle") else NULL
+  cycle <- if (S7_inherits(to, mt_cyclical) || S7_inherits(to, mt_cyclical_free)) attr(to, "cycle") else NULL
   data <- vec_data(time_parse_impl(
     x,
     chronon = attr(to, "chronon"),
@@ -126,7 +167,7 @@ mt_cast_from_character <- function(x, to, ...) {
 cycle_common <- function(x, y) {
   x <- granule_inherit_props(x, y)
   y <- granule_inherit_props(y, x)
-  if (!identical(x, y)) return(NULL)
+  if (!granule_identical(x, y)) return(NULL)
   x
 }
 
@@ -139,7 +180,7 @@ cycle_incompatible_details <- paste0(
 mt_cast_time_time <- function(x, to, ..., x_arg = "", to_arg = "") {
   if (S7_inherits(to, mt_duration)) {
     discrete <- is.integer(vec_data(to))
-    x <- as.numeric(x) * chronon_cardinality(attr(to, "chronon"), attr(x, "chronon"))
+    x <- as.numeric(vec_data(x)) * chronon_cardinality(attr(to, "chronon"), attr(x, "chronon"))
     # Whole granules only, as in `duration()`
     if (discrete) x <- as.integer(trunc(round_ulp(x)))
     attributes(x) <- attributes(to)
@@ -155,6 +196,55 @@ mt_cast_time_time <- function(x, to, ..., x_arg = "", to_arg = "") {
   x <- chronon_convert(x, attr(to, "chronon"), discrete = is.integer(to))
   attributes(x) <- attributes(to)
   x
+}
+
+# --- time-to-time cast for mt_cyclical_free (same kind only) ---
+# A magnitude like mt_duration: chronon_cardinality() scaling, never chronon_convert().
+mt_cast_time_time_free <- function(x, to, ..., x_arg = "", to_arg = "") {
+  if (is.null(cycle_common(attr(x, "cycle"), attr(to, "cycle")))) {
+    vctrs::stop_incompatible_cast(
+      x, to, x_arg = x_arg, to_arg = to_arg,
+      details = cycle_incompatible_details
+    )
+  }
+  discrete <- is.integer(vec_data(to))
+  x <- as.numeric(vec_data(x)) * chronon_cardinality(attr(to, "chronon"), attr(x, "chronon"))
+  if (discrete) x <- as.integer(x)
+  attributes(x) <- attributes(to)
+  x
+}
+
+# Underspecified (free) and located cyclical time never convert to each other.
+free_incompatible_details <- paste0(
+  "Underspecified cyclical time (from a bare position, e.g. ",
+  "`month_of_year(3)`) has no enclosing cycle, so it can't be combined with ",
+  "located cyclical time."
+)
+mt_cast_free_located <- function(x, to, ..., x_arg = "", to_arg = "") {
+  vctrs::stop_incompatible_cast(
+    x, to, x_arg = x_arg, to_arg = to_arg,
+    details = free_incompatible_details
+  )
+}
+mt_ptype2_free_located <- function(x, y, ..., x_arg = "", y_arg = "") {
+  vctrs::stop_incompatible_type(
+    x, y, x_arg = x_arg, y_arg = y_arg,
+    details = free_incompatible_details
+  )
+}
+
+mt_ptype2_time_time_free <- function(x, y, ..., x_arg = "", y_arg = "") {
+  cycle <- cycle_common(attr(x, "cycle"), attr(y, "cycle"))
+  if (is.null(cycle)) {
+    vctrs::stop_incompatible_type(
+      x, y, x_arg = x_arg, y_arg = y_arg,
+      details = cycle_incompatible_details
+    )
+  }
+  mt_cyclical_free(
+    chronon = chronon_glb_impl(list(attr(x, "chronon"), attr(y, "chronon"))),
+    cycle = cycle
+  )
 }
 
 # --- prototype2 between two time vectors of the same kind ---
@@ -190,7 +280,7 @@ mt_ptype2_time_time <- function(x, y, ..., x_arg = "", y_arg = "") {
   }
 }
 
-# --- duration <-> numeric prototypes (only durations combine with bare numbers) ---
+# --- duration/free <-> numeric prototypes (only these combine with bare numbers) ---
 mt_ptype2_duration_x <- function(x, y, ...) x
 mt_ptype2_y_duration <- function(x, y, ...) y
 
@@ -211,12 +301,48 @@ register_mt_vctrs <- function() {
     register_s3_method("vctrs", "vec_ptype2", paste0(cls, ".", cls), mt_ptype2_time_time)
   }
 
+  # mt_cyclical_free: registered separately, its casts use their own logic.
+  free <- "mixtime::mt_cyclical_free"
+  register_s3_method("vctrs", "vec_cast.character", free, mt_cast_to_character_free)
+  register_s3_method("vctrs", "vec_cast.integer", free, mt_cast_to_integer)
+  register_s3_method("vctrs", "vec_cast.double", free, mt_cast_to_double)
+  register_s3_method("vctrs", "vec_cast", paste0(free, ".integer"), mt_cast_from_numeric_free)
+  register_s3_method("vctrs", "vec_cast", paste0(free, ".double"), mt_cast_from_numeric_free)
+  register_s3_method("vctrs", "vec_cast", paste0(free, ".", free), mt_cast_time_time_free)
+  register_s3_method("vctrs", "vec_ptype2", paste0(free, ".", free), mt_ptype2_time_time_free)
+  register_s3_method("vctrs", "vec_cast", paste0(free, ".character"), mt_cast_from_character)
+  # Bare numbers combine with free cyclical time as positions in its cycle.
+  for (num in c("integer", "double")) {
+    register_s3_method("vctrs", "vec_ptype2", paste0(free, ".", num), mt_ptype2_duration_x)
+    register_s3_method("vctrs", "vec_ptype2", paste0(num, ".", free), mt_ptype2_y_duration)
+  }
+  # Underspecified and located cyclical time are incompatible, with a clear message.
+  cyc <- "mixtime::mt_cyclical"
+  register_s3_method("vctrs", "vec_cast", paste0(free, ".", cyc), mt_cast_free_located)
+  register_s3_method("vctrs", "vec_cast", paste0(cyc, ".", free), mt_cast_free_located)
+  register_s3_method("vctrs", "vec_ptype2", paste0(free, ".", cyc), mt_ptype2_free_located)
+  register_s3_method("vctrs", "vec_ptype2", paste0(cyc, ".", free), mt_ptype2_free_located)
+
+  # Overrides vecvec's no-op mixtime -> mixtime cast (registered just before).
+  register_s3_method("vctrs", "vec_ptype", "mixtime::mixtime", vec_ptype_mixtime)
+  register_s3_method(
+    "vctrs", "vec_cast", "mixtime::mixtime.mixtime::mixtime", vec_cast_mixtime_mixtime
+  )
+
   # A linear time vector can be cast to Date / POSIXct.
   register_s3_method("vctrs", "vec_cast.Date", "mixtime::mt_linear", mt_cast_to_Date)
   register_s3_method("vctrs", "vec_cast.POSIXct", "mixtime::mt_linear", mt_cast_to_POSIXct)
 
   register_s3_method("vctrs", "vec_cast", "mixtime::mt_linear.character", mt_cast_from_character)
   register_s3_method("vctrs", "vec_cast", "mixtime::mt_cyclical.character", mt_cast_from_character)
+
+  # Time classes from other packages ({zoo} and {tsibble}) cast to mixtime via
+  # their `time_chronon()` and `chronon_convert()` methods (for `as_mixtime()`).
+  for (cls in c("yearmon", "yearqtr", "yearmonth", "yearquarter", "yearweek")) {
+    register_s3_method(
+      "vctrs", "vec_cast", paste0("mixtime::mixtime.", cls), vec_cast_to_mixtime
+    )
+  }
 
   # Durations combine with bare numbers.
   dur <- "mixtime::mt_duration"

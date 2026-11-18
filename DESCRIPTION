@@ -1,6 +1,6 @@
 Package: mixtime
 Title: Mixed Temporal Vectors and Operations
-Version: 0.4.0
+Version: 0.5.0
 Authors@R: 
     c(person(given = "Mitchell",
              family = "O'Hara-Wild",
@@ -36,20 +36,20 @@ BugReports: https://github.com/mitchelloharawild/mixtime/issues
 Encoding: UTF-8
 Language: en-GB
 Depends: R (>= 3.0.2)
-Imports: lifecycle, vctrs, rlang, cli, S7, vecvec (>= 1.2.0), tzdb,
-        methods
+Imports: lifecycle, vctrs, rlang, cli, S7 (>= 0.2.2), vecvec (>=
+        1.4.0), tzdb, methods
 Suggests: stats, tsibble, testthat, pillar, knitr, rmarkdown, ggplot2,
-        ggtime
+        ggtime, callr, pkgload, zoo
 LinkingTo: cpp11 (>= 0.5.2), tzdb (>= 0.5.0)
 RdMacros: lifecycle
 VignetteBuilder: knitr
-Config/roxygen2/version: 8.0.0
+Config/roxygen2/version: 8.1.1
 NeedsCompilation: yes
-Packaged: 2026-10-13 01:46:36 UTC; mitchell
+Packaged: 2026-11-18 08:43:50 UTC; mitchell
 Author: Mitchell O'Hara-Wild [aut, cre] (ORCID:
     <https://orcid.org/0000-0001-6729-7695>),
   Cynthia Huang [ctb] (ORCID: <https://orcid.org/0000-0002-9218-987X>),
   Rob Hyndman [ctb] (ORCID: <https://orcid.org/0000-0002-2140-5352>)
 Maintainer: Mitchell O'Hara-Wild <mail@mitchelloharawild.com>
 Repository: CRAN
-Date/Publication: 2026-10-13 03:40:02 UTC
+Date/Publication: 2026-11-18 09:10:02 UTC

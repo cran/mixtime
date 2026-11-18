@@ -32,6 +32,13 @@ fmt_lunar <- "{with(cal_time_lunar, cyc(phase, month, label = TRUE, type = \"emo
 format(date(Sys.Date()), format = paste(fmt_date, fmt_lunar))
 
 ## -----------------------------------------------------------------------------
+format(hours(c(2L, 30L)), format = "{dur(minute)} elapsed")
+
+## -----------------------------------------------------------------------------
+time_parse(c("3 days", "1 day", "2D", "5"), format = "{dur(day)}")
+time_parse("1.5 days", format = "{dur(day)}", discrete = FALSE)
+
+## -----------------------------------------------------------------------------
 # YYYY-MM-DD format for a Gregorian date
 format(date(Sys.Date()), format = "{lin(year)}-{cyc(month, year)}-{cyc(day, month)}")
 format(Sys.Date(), format = "%Y-%m-%d")

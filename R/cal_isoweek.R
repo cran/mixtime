@@ -21,7 +21,7 @@
 #' January may belong to the last week of the previous ISO year, and some days in
 #' late December may belong to the first week of the next ISO year.
 #' 
-#' @return An S3 list of class `c("cal_isoweek", "mt_calendar")` containing
+#' @return A calendar (an S7 [`mt_calendar`] object of class `cal_isoweek`) containing
 #'   the named time unit classes of the ISO 8601 week calendar. Each unit is
 #'   accessible via `$` notation and calling it with a step size produces a
 #'   time granule (e.g., 1 week granule as `cal_isoweek$week(1L)`).
@@ -32,17 +32,21 @@
 #' @name calendar_isoweek
 #' @export
 cal_isoweek <- new_calendar(
-  year = S7::new_class("tu_isoyear", parent = mt_tz_unit),
-  week = S7::new_class("tu_week", parent = mt_tz_unit),
+  year = new_time_unit("tu_isoyear", parent = mt_tz_unit),
+  week = new_time_unit("tu_week", parent = mt_tz_unit),
   inherit = cal_time_civil,
-  class = "cal_isoweek"
+  name = "cal_isoweek"
 )
 
 # Time unit labels
-method(time_unit_full, cal_isoweek$year) <- function(x) "isoyear{?/s}"
-method(time_unit_abbr, cal_isoweek$year) <- function(x) "IY"
-method(time_unit_full, cal_isoweek$week) <- function(x) "week{?/s}"
-method(time_unit_abbr, cal_isoweek$week) <- function(x) "W"
+method(unit_labels, cal_isoweek$year) <- unit_scheme(
+  vocab = vocab_table(`en-GB` = list(wide = "isoyear{?/s}")),
+  symbol = "IY"
+)
+method(unit_labels, cal_isoweek$week) <- unit_scheme(
+  vocab = vocab_table(`en-GB` = list(wide = "week{?/s}")),
+  symbol = "W"
+)
 
 # Epoch for years
 method(chronon_epoch, cal_isoweek$year) <- function(x) 1970L
@@ -50,7 +54,7 @@ method(chronon_epoch, cal_isoweek$year) <- function(x) 1970L
 # Default formats
 method(chronon_format_linear, list(cal_isoweek$year, class_any)) <- function(x, cal) "{lin(year)}"
 method(chronon_format_linear, list(cal_isoweek$week, class_any)) <- function(x, cal) "{lin(year)} W{cyc(week,year)}"
-method(chronon_format_linear, list(cal_isoweek$day, S7::new_S3_class("cal_isoweek"))) <- function(x, cal) "{lin(year)}-W{cyc(week,year)}-{cyc(day,week,label=TRUE)}"
+method(chronon_format_linear, list(cal_isoweek$day, S7::S7_class(cal_isoweek))) <- function(x, cal) "{lin(year)}-W{cyc(week,year)}-{cyc(day,week,label=TRUE)}"
 method(chronon_format_cyclical, list(cal_isoweek$day, cal_isoweek$week)) <- function(x, y) "{cyc(day,week,label=TRUE)}"
 method(chronon_format_cyclical, list(cal_isoweek$week, cal_isoweek$year)) <- function(x, y) "W{cyc(week,year)}"
 
@@ -64,7 +68,7 @@ method(chronon_parse_linear, list(cal_isoweek$week, class_any)) <- function(x, c
     regex = TRUE
   )
 }
-method(chronon_parse_linear, list(cal_isoweek$day, S7::new_S3_class("cal_isoweek"))) <- function(x, cal) {
+method(chronon_parse_linear, list(cal_isoweek$day, S7::S7_class(cal_isoweek))) <- function(x, cal) {
   parse_format(
     # e.g. "2024-W01-3", "2024W01 Wed", "2024 w1 Wednesday"
     "[[:space:]]*{lin(year)}[-/,._[:space:]]*(?i:weeks?|wk|w)[-/,._[:space:]]*{cyc(week,year)}[-/,._[:space:]]+{cyc(day,week)}[[:space:]]*",

@@ -154,10 +154,10 @@ test_that("a calendar-author decode() that throws still falls back to per-row re
   expect_equal(format(r[c(1L, 3L)]), c("2024-01-15", "2024-03-20"))
 })
 
-test_that("a format with no lin() anchor parses to cyclical time", {
+test_that("a format with no lin() component parses to cyclical time", {
   r <- time_parse("Feb", format = "{cyc(month, year, label = TRUE)}")
 
-  expect_true(time_is_cyclical(r))
+  expect_true(time_is_cyclical_free(r))
   expect_equal(format(r), "Feb")
   expect_equal(
     as.numeric(vecvec::unvecvec(r)),
@@ -165,15 +165,19 @@ test_that("a format with no lin() anchor parses to cyclical time", {
   )
 })
 
-test_that("a chained cyc()-only format parses to cyclical time", {
-  # Collapses to (day, year): day-of-year 74, same as day_of_year() for 15 March.
-  r <- time_parse("15 Mar", format = "{cyc(day, month)} {cyc(month, year, label = TRUE)}")
+test_that("a chained cyc()-only format parses to cyclical time when fixed-length", {
+  # Collapses to (minute, day): minute-of-day 149 is 02:29.
+  r <- time_parse("29 02", format = "{cyc(minute, hour)} {cyc(hour, day)}")
 
-  expect_true(time_is_cyclical(r))
-  expect_equal(format(r), "D74")
-  expect_equal(
-    as.numeric(vecvec::unvecvec(r)),
-    as.numeric(vecvec::unvecvec(day_of_year(as.Date("1970-03-15"))))
+  expect_true(time_is_cyclical_free(r))
+  expect_equal(r, time_compose(cyc(minute, hour) ~ 30, cyc(hour, day) ~ 3))
+})
+
+test_that("a chained cyc()-only format with a variable-length link errors", {
+  # 15 March is day-of-year 74, or 75 in a leap year.
+  expect_error(
+    time_parse("15 Mar", format = "{cyc(day, month)} {cyc(month, year, label = TRUE)}"),
+    "Include the coarser"
   )
 })
 
@@ -670,7 +674,7 @@ test_that("chronon_parse_cyclical() for civil time-of-day-in-day chronons parses
   fmt <- chronon_parse_cyclical(cal_gregorian$second(1L), cal_gregorian$day(1L))
   r <- time_parse("09:30:45", format = fmt, calendar = cal_gregorian)
 
-  expect_true(time_is_cyclical(r))
+  expect_true(time_is_cyclical_free(r))
   expect_equal(format(r), "09:30:45")
 })
 
@@ -704,7 +708,7 @@ test_that("chronon_parse_cyclical() for civil hour-in-day chronons parses a bare
   rpm <- time_parse("2 PM", format = fmt, calendar = cal_gregorian)
   ram <- time_parse("2 AM", format = fmt, calendar = cal_gregorian)
 
-  expect_true(time_is_cyclical(r24))
+  expect_true(time_is_cyclical_free(r24))
   expect_equal(format(r24, "{cyc(hour,day)}"), "14")
   expect_equal(format(rpm, "{cyc(hour,day)}"), "14")
   expect_equal(format(ram, "{cyc(hour,day)}"), "02")
@@ -769,9 +773,9 @@ test_that("time_parse_impl() returns a simple time vector, and time_parse() is a
   expect_equal(format(wrapped), format(r))
 })
 
-test_that("time_parse_impl() returns a simple cyclical vector for a cyc()-only format", {
+test_that("time_parse_impl() returns a simple underspecified cyclical vector for a cyc()-only format", {
   r <- time_parse_impl("Feb", format = "{cyc(month, year, label = TRUE)}")
-  expect_true(S7::S7_inherits(r, mt_cyclical))
+  expect_true(S7::S7_inherits(r, mt_cyclical_free))
   expect_false(is_mixtime(r))
 })
 
@@ -818,4 +822,89 @@ test_that("chronon_parse_cyclical() for microsecond/nanosecond-in-day chronons p
   expect_equal(format(x), "00:00:01.000056")
   x <- time_parse("00:00:01.000000056", chronon = cal_gregorian$nanosecond(1L), cycle = cal_gregorian$day(1L))
   expect_equal(format(x), "00:00:01.000000056")
+})
+
+# Durations: a {dur(...)} token parses a number with an optional unit name.
+
+test_that("dur() parses magnitudes with optional unit names", {
+  r <- time_parse(c("3 days", "1 day", "2D", "5", "-2 Days"), format = "{dur(day)}")
+
+  expect_true(all(time_is_duration(r)))
+  expect_equal(as.integer(vecvec::unvecvec(r)), c(3L, 1L, 2L, 5L, -2L))
+  expect_equal(format(r), c("3 days", "1 day", "2 days", "5 days", "-2 days"))
+})
+
+test_that("dur() rejects another unit's name", {
+  expect_error(time_parse("3 months", format = "{dur(day)}"), class = "mixtime_parse_no_match")
+  # Abbreviations are case-sensitive: "m" is minute, "M" is month.
+  expect_equal(format(time_parse("5m", format = "{dur(minute)}")), "5 minutes")
+  expect_error(time_parse("5M", format = "{dur(minute)}"), class = "mixtime_parse_no_match")
+})
+
+test_that("dur() always parses to a 1-unit chronon", {
+  r <- time_parse("6 hours", format = "{dur(hour(3L))}")
+
+  expect_equal(chronon_glb(r), cal_gregorian$hour(1L))
+  expect_equal(as.integer(vecvec::unvecvec(r)), 6L)
+})
+
+test_that("dur() surrounding literal text and NA values", {
+  r <- time_parse(c("3 hours ago", "", NA), format = "{dur(hour)} ago")
+
+  expect_equal(is.na(r), c(FALSE, TRUE, TRUE))
+  expect_equal(format(r[1]), "3 hours")
+  expect_length(time_parse(character(), format = "{dur(hour)}"), 0L)
+})
+
+test_that("continuous (discrete = FALSE) dur() parsing keeps fractional magnitudes", {
+  r <- time_parse(c("1.5 days", "2", ".25 days", "1e1 days"), format = "{dur(day)}", discrete = FALSE)
+
+  expect_type(vecvec::unvecvec(r), "double")
+  expect_equal(as.numeric(vecvec::unvecvec(r)), c(1.5, 2, 0.25, 10))
+})
+
+test_that("a fractional magnitude fails to parse as a discrete duration", {
+  expect_warning(
+    r <- time_parse(c("1.5 days", "2.0 days"), format = "{dur(day)}"),
+    "1 value failed to parse"
+  )
+  expect_equal(as.integer(vecvec::unvecvec(r)), c(NA, 2L))
+})
+
+test_that("dur() round-trips through format()", {
+  x <- duration(c(1L, 3L, 40L), cal_gregorian$hour(1L))
+  expect_equal(time_parse(format(x, "{dur(hour)}"), format = "{dur(hour)}"), x)
+
+  y <- duration(c(1.5, 2.25), cal_gregorian$day(1L))
+  expect_equal(
+    time_parse(format(y, "{dur(day)}"), format = "{dur(day)}", discrete = FALSE),
+    y
+  )
+})
+
+test_that("dur() results are converted onto a supplied chronon", {
+  r <- time_parse("3 hours", format = "{dur(hour)}", chronon = cal_gregorian$minute(1L))
+
+  expect_equal(format(r), "180 minutes")
+  expect_error(
+    time_parse("3 hours", format = "{dur(hour)}", chronon = cal_gregorian$minute(1L), cycle = cal_gregorian$hour(1L)),
+    "cycle"
+  )
+})
+
+test_that("dur() can't be combined with other tokens", {
+  expect_error(time_parse("3 2024", format = "{dur(day)} {lin(year)}"), "only token")
+  expect_error(time_parse("3 4", format = "{dur(day)} {dur(hour)}"), "only token")
+})
+
+test_that("dur() rejects non-English locales", {
+  expect_error(time_parse("3 jours", format = "{dur(day)}", locale = "fr-FR"), "English-only")
+  expect_equal(format(time_parse("3 days", format = "{dur(day)}", locale = "en-GB")), "3 days")
+})
+
+test_that("dur() and lin() formats can compete as candidates", {
+  fmts <- c("{lin(year)}-{cyc(month, year)}-{cyc(day, month)}", "{dur(month)}")
+
+  expect_true(all(time_is_duration(time_parse(c("2 months", "3 months"), format = fmts))))
+  expect_false(any(time_is_duration(time_parse("2024-01-01", format = fmts))))
 })

@@ -21,13 +21,16 @@ test_that("vec_cast to character works for mt_duration", {
 
 test_that("inner time vectors are S7 objects of the right class", {
   lin <- yearmonth(0:3)@x[[1L]]
-  cyc <- month_of_year(0:3)@x[[1L]]
+  cyc <- month_of_year(as.Date("2020-01-01") + 0:3)@x[[1L]]
+  cyc_free <- month_of_year(0:3)@x[[1L]]
   dur <- days(0:3)@x[[1L]]
   expect_true(S7::S7_inherits(lin, mt_linear))
   expect_true(S7::S7_inherits(cyc, mt_cyclical))
+  expect_true(S7::S7_inherits(cyc_free, mt_cyclical_free))
   expect_true(S7::S7_inherits(dur, mt_duration))
   # cyclical carries a typed `cycle` property; chronon is a typed `mt_unit`
   expect_true(S7::S7_inherits(cyc@cycle, mt_unit))
+  expect_true(S7::S7_inherits(cyc_free@cycle, mt_unit))
   expect_true(S7::S7_inherits(lin@chronon, mt_unit))
 })
 
@@ -43,10 +46,17 @@ test_that("vec_cast() parses character onto a linear time vector's own chronon",
 })
 
 test_that("vec_cast() parses character onto a cyclical time vector's own chronon/cycle", {
-  to <- month_of_year(0L)@x[[1L]]
+  to <- month_of_year(as.Date("2020-01-01"))@x[[1L]]
   cast <- vctrs::vec_cast("Feb", to)
   expect_true(S7::S7_inherits(cast, mt_cyclical))
   expect_equal(cast, month_of_year(date("2020-02-15"))@x[[1L]])
+})
+
+test_that("vec_cast() parses character onto an underspecified cyclical time vector's own chronon/cycle", {
+  to <- month_of_year(0L)@x[[1L]]
+  cast <- vctrs::vec_cast("Feb", to)
+  expect_true(S7::S7_inherits(cast, mt_cyclical_free))
+  expect_equal(cast, month_of_year(2L)@x[[1L]])
 })
 
 test_that("vec_cast() from character fills in unset chronon properties (e.g. tz) from the target", {
@@ -91,4 +101,27 @@ test_that("mode of time (integer/double) survives vec_slice/vec_c/vec_restore", 
   combined <- c(yearmonth(0:1), yearmonth(2:3))
   expect_s7_class(combined, class_mixtime)
   expect_type(vctrs::vec_data(combined@x[[1L]]), "integer")
+})
+
+test_that("deserialised mixtime vectors can be combined (vec_c / vec_cast)", {
+  x <- yearmonth(0:2)
+  y <- unserialize(serialize(x, NULL))
+  # Deserialising gives the S7 class attribute a new identity
+  expect_false(identical(attributes(x), attributes(y)))
+  expect_equal(vctrs::vec_c(y, y), c(x, x))
+  expect_equal(vctrs::vec_c(x, y), c(x, x))
+  expect_equal(vctrs::vec_cast(x, vctrs::vec_ptype(y)), x)
+  expect_equal(vctrs::vec_rbind(data.frame(t = y), data.frame(t = x))$t, c(x, x))
+})
+
+test_that("mixtime read from an RDS written by another R session can be combined", {
+  skip_on_cran()
+  path <- tempfile(fileext = ".rds")
+  on.exit(unlink(path))
+  r_mixtime(function(path) {
+    saveRDS(list(a = yearmonth(0:2), b = yearmonth(3:5)), path)
+  }, list(path = path))
+  v <- readRDS(path)
+  expect_no_error(out <- vctrs::vec_c(v$a, v$b))
+  expect_equal(out, yearmonth(0:5))
 })

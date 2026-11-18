@@ -76,9 +76,9 @@ time_components <- function(x, ..., calendar = time_calendar(x)) {
   )
 }
 
-#' Linear and cyclical component helpers
+#' Linear, cyclical and duration component helpers
 #'
-#' `lin()` and `cyc()` name the time components addressed by mixtime's
+#' `lin()`, `cyc()` and `dur()` name the time components addressed by mixtime's
 #' *component-aware contexts* — a single vocabulary shared across [format()] (and
 #' parsing) format strings and [time_components()] expressions. They are only
 #' meaningful inside one of these contexts; calling them directly is an error.
@@ -88,16 +88,23 @@ time_components <- function(x, ..., calendar = time_calendar(x)) {
 #' position happens only when a cyclical vector is formatted. `cyc()` therefore
 #' behaves like `lin()` on its finest granule but additionally records the cycle.
 #'
+#' `dur()` addresses a *duration* (an unanchored span of time, see [duration()])
+#' counted in units of a granule, e.g. `"{dur(day)}"` formats and parses text
+#' like `"3 days"`. A duration has no position in the calendar, so `dur()` must
+#' be the only token in its format string and isn't available in
+#' [time_components()]. Its granule is always a 1-unit granule, so
+#' `dur(hour(3L))` behaves like `dur(hour)`.
+#'
 #' @param granule The time granule to address, given as a granule generator (e.g.
 #'   `year`) or a sized time unit (e.g. `year(1L)`). Resolved in the calendar of
-#'   the time vector being formatted or decomposed.
+#'   the time vector being formatted, parsed or decomposed.
 #' @param cycle The coarser granule defining the cycle a `cyc()` component repeats
 #'   within (e.g. `year` in `cyc(month, year)`).
 #'
 #' @return A component specification, consumed internally by the component-aware
-#'   context (e.g. [format()] or [time_components()]).
+#'   context (e.g. [format()], [time_parse()] or [time_components()]).
 #'
-#' @seealso [format()] and [time_components()]
+#' @seealso [format()], [time_parse()], [time_components()] and [duration()]
 #'
 #' @name component_helpers
 #' @export
@@ -123,6 +130,18 @@ cyc <- function(granule, cycle) {
   )
 }
 
+#' @rdname component_helpers
+#' @export
+dur <- function(granule) {
+  cli::cli_abort(
+    c(
+      "{.fn dur} must be used inside a component-aware context.",
+      i = "Use it in a {.fn format} string or when parsing a duration, e.g. {.code dur(day)}."
+    ),
+    call = NULL
+  )
+}
+
 # Decompose a single mt_time into the requested lin()/cyc() component vectors.
 # Returns a list of mt_linear / mt_cyclical vectors, one per element of `specs`,
 # in the same order.
@@ -135,6 +154,15 @@ component_parts <- function(x_time, specs, calendar) {
   mask <- component_mask(calendar, chronon)
 
   evaled <- lapply(specs, eval_component, mask = mask)
+  if (any(vapply(evaled, inherits, logical(1L), "mt_dur_spec"))) {
+    cli::cli_abort(
+      c(
+        "{.fn dur} can't be used in {.fn time_components}.",
+        i = "Use {.fn lin} or {.fn cyc} to extract components of a time point."
+      ),
+      call = NULL
+    )
+  }
 
   # Drop special values (NA / Inf) before decomposition, as format() does.
   xd <- vec_data(x_time)
@@ -169,9 +197,20 @@ component_parts <- function(x_time, specs, calendar) {
   .mapply(
     function(spec, val, ok) {
       if (ok) {
-        # chronon_parts() adds chronon_epoch() to linear parts for display; undo
-        # it so the stored value is a count of chronons since the Unix epoch.
-        val <- coerce(val - chronon_epoch(spec[[1L]]))
+        if (chronon_is_local(spec[[1L]])) {
+          # chronon_parts() adds chronon_epoch() to linear parts for display;
+          # undo it so the stored value is a count of chronons since the Unix
+          # epoch.
+          val <- coerce(val - chronon_epoch(spec[[1L]]))
+        } else {
+          # chronon_parts() gives local wall-clock labels, but a chronon with a
+          # UTC offset (e.g. hour(tz = "Australia/Melbourne")) stores absolute
+          # counts, so convert those directly. Reading the labels back would
+          # apply the offset twice, and they're ambiguous when clocks go back.
+          val <- coerce(chronon_convert_impl(
+            xd[keep], chronon, spec[[1L]], discrete = TRUE
+          ))
+        }
       }
       if (length(spec) == 2L) {
         # Cyclical: NA for an indeterminate component, and for a special
@@ -205,9 +244,9 @@ component_parts <- function(x_time, specs, calendar) {
 # in the calendar of `chronon` (useful for cyclical granularities between
 # calendars, e.g. day-of-week).
 component_mask <- function(calendar, chronon = NULL) {
-  cal <- calendar
+  cal <- calendar_units(calendar)
   if (!is.null(chronon)) {
-    cal <- time_calendar(chronon)
+    cal <- calendar_units(time_calendar(chronon))
     extra <- setdiff(names(calendar), names(cal))
     cal[extra] <- calendar[extra]
   }
@@ -229,6 +268,12 @@ component_mask <- function(calendar, chronon = NULL) {
       lin = function(granule, ...) structure(list(as_tu(granule)), ...),
       cyc = function(granule, cycle, ...) {
         structure(list(as_tu(granule), as_tu(cycle)), ...)
+      },
+      # Classed to distinguish it from lin(), with its granule fixed to 1 unit.
+      dur = function(granule, ...) {
+        g <- as_tu(granule)
+        if (!identical(g@n, 1L)) S7::prop(g, "n") <- 1L
+        structure(list(g), ..., class = "mt_dur_spec")
       }
     )
   )

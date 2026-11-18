@@ -7,13 +7,19 @@ naive_tz <- naive(NA_character_)
 mt_tz_unit <- new_class(
   "mt_tz_unit",
   parent = mt_unit,
-  properties = list(tz = new_property(S7::class_character, default = naive_tz)),
-  constructor = function(n = 1L, tz = naive_tz) {
+  properties = list(
+    tz = new_property(S7::class_character, default = quote(naive_tz))
+  ),
+  constructor = function(
+    n = 1L,
+    tz = naive_tz,
+    calendar = attr(sys.function(), "cal")
+  ) {
     # Allow for logical NA for convenience
     if (is.na(tz) && !identical(tz, naive_tz)) {
       tz <- NA_character_
     }
-    S7::new_object(mt_unit(n = n), tz = tz)
+    S7::new_object(mt_unit(n = n, calendar = calendar), tz = tz)
   },
   validator = function(self) {
     if (!is.na(self@tz)) {
@@ -61,40 +67,50 @@ method(chronon_format_attr, mt_tz_unit) <- function(x) {
 #' @name calendar_time_civil
 #' @export
 cal_time_civil <- new_calendar(
-  day = new_class("tu_day", parent = mt_tz_unit),
-  ampm = new_class("tu_ampm", parent = mt_tz_unit),
-  hour = new_class("tu_hour", parent = mt_tz_unit),
-  minute = new_class("tu_minute", parent = mt_tz_unit),
-  second = new_class("tu_second", parent = mt_tz_unit),
-  millisecond = new_class("tu_millisecond", parent = mt_tz_unit),
-  microsecond = new_class("tu_microsecond", parent = mt_tz_unit),
-  nanosecond = new_class("tu_nanosecond", parent = mt_tz_unit),
-  class = "cal_time_civil"
+  day = new_time_unit("tu_day", parent = mt_tz_unit),
+  ampm = new_time_unit("tu_ampm", parent = mt_tz_unit),
+  hour = new_time_unit("tu_hour", parent = mt_tz_unit),
+  minute = new_time_unit("tu_minute", parent = mt_tz_unit),
+  second = new_time_unit("tu_second", parent = mt_tz_unit),
+  millisecond = new_time_unit("tu_millisecond", parent = mt_tz_unit),
+  microsecond = new_time_unit("tu_microsecond", parent = mt_tz_unit),
+  nanosecond = new_time_unit("tu_nanosecond", parent = mt_tz_unit),
+  name = "cal_time_civil"
 )
 
 # Time unit labels
-method(time_unit_full, cal_time_civil$day) <- function(x) "day{?/s}"
-method(time_unit_abbr, cal_time_civil$day) <- function(x) "D"
-method(time_unit_full, cal_time_civil$ampm) <- function(x) "halfday{?/s}"
-method(time_unit_abbr, cal_time_civil$ampm) <- function(x) "hd"
-method(time_unit_full, cal_time_civil$hour) <- function(x) "hour{?/s}"
-method(time_unit_abbr, cal_time_civil$hour) <- function(x) "h"
-method(time_unit_full, cal_time_civil$minute) <- function(x) "minute{?/s}"
-method(time_unit_abbr, cal_time_civil$minute) <- function(x) "m"
-method(time_unit_full, cal_time_civil$second) <- function(x) "second{?/s}"
-method(time_unit_abbr, cal_time_civil$second) <- function(x) "s"
-method(time_unit_full, cal_time_civil$millisecond) <- function(x) {
-  "millisecond{?/s}"
-}
-method(time_unit_abbr, cal_time_civil$millisecond) <- function(x) "ms"
-method(time_unit_full, cal_time_civil$microsecond) <- function(x) {
-  "microsecond{?/s}"
-}
-method(time_unit_abbr, cal_time_civil$microsecond) <- function(x) "us"
-method(time_unit_full, cal_time_civil$nanosecond) <- function(x) {
-  "nanosecond{?/s}"
-}
-method(time_unit_abbr, cal_time_civil$nanosecond) <- function(x) "ns"
+method(unit_labels, cal_time_civil$day) <- unit_scheme(
+  vocab = vocab_table(`en-GB` = list(wide = "day{?/s}")),
+  symbol = "D"
+)
+method(unit_labels, cal_time_civil$ampm) <- unit_scheme(
+  vocab = vocab_table(`en-GB` = list(wide = "halfday{?/s}")),
+  symbol = "hd"
+)
+method(unit_labels, cal_time_civil$hour) <- unit_scheme(
+  vocab = vocab_table(`en-GB` = list(wide = "hour{?/s}")),
+  symbol = "h"
+)
+method(unit_labels, cal_time_civil$minute) <- unit_scheme(
+  vocab = vocab_table(`en-GB` = list(wide = "minute{?/s}")),
+  symbol = "m"
+)
+method(unit_labels, cal_time_civil$second) <- unit_scheme(
+  vocab = vocab_table(`en-GB` = list(wide = "second{?/s}")),
+  symbol = "s"
+)
+method(unit_labels, cal_time_civil$millisecond) <- unit_scheme(
+  vocab = vocab_table(`en-GB` = list(wide = "millisecond{?/s}")),
+  symbol = "ms"
+)
+method(unit_labels, cal_time_civil$microsecond) <- unit_scheme(
+  vocab = vocab_table(`en-GB` = list(wide = "microsecond{?/s}")),
+  symbol = "us"
+)
+method(unit_labels, cal_time_civil$nanosecond) <- unit_scheme(
+  vocab = vocab_table(`en-GB` = list(wide = "nanosecond{?/s}")),
+  symbol = "ns"
+)
 
 # Default formats
 method(chronon_format_linear, list(cal_time_civil$day, class_any)) <- function(

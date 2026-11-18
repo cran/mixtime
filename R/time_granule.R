@@ -1,5 +1,8 @@
 #' @importFrom S7 props props<-
 granule_inherit_props <- function(x, parent) {
+  if (is.null(x@calendar)) {
+    x@calendar <- parent@calendar
+  }
   naive_props <- is.naive(props <- props(x))
   parent_props <- props(parent)
   inherit_props <- intersect(names(props)[naive_props], names(parent_props))
@@ -10,6 +13,10 @@ granule_inherit_props <- function(x, parent) {
 
 # Inherit naive properties on which every parent shares the same attribute.
 granule_inherit_shared_props <- function(x, parents) {
+  calendars <- lapply(parents, time_calendar)
+  if (all(vapply(calendars, identical, logical(1L), calendars[[1L]]))) {
+    x@calendar <- calendars[[1L]]
+  }
   # Build a stand-in parent by filling x's own naive properties with the
   # value every parent agrees on, then let granule_inherit_props() perform
   # the actual copy (a no-op for properties left untouched below).
@@ -60,7 +67,11 @@ granule_identical <- function(x, y) {
   if (!identical(S7_class_id(x), S7_class_id(y))) {
     return(FALSE)
   }
-  props_equal(props(x), props(y))
+  x_props <- props(x)
+  y_props <- props(y)
+  # Calendar membership does not change a unit's size or physical context.
+  x_props$calendar <- y_props$calendar <- NULL
+  props_equal(x_props, y_props)
 }
 
 # Are the named property lists `x` and `y` the same, treating integer and
@@ -74,7 +85,7 @@ props_equal <- function(x, y) {
     a <- x[[nm]]
     b <- y[[nm]]
     same <- if (is.numeric(a) && is.numeric(b)) {
-      identical(as.double(a), as.double(b))
+      identical(as.double(vec_data(a)), as.double(vec_data(b)))
     } else {
       identical(a, b)
     }
@@ -94,4 +105,20 @@ granule_harden_naive <- function(x) {
   props[naive_props] <- lapply(props[naive_props], unclass)
   props(x) <- props
   x
+}
+
+# Normalise a granule's size `n` to a canonical storage type: whole numbers
+# (within integer range) are stored as integers, matching the `1L` used by
+# unit constructors (e.g. `cal_gregorian$day(1L)`). Without this, a size
+# computed with doubles (e.g. `unit@n * as.numeric(duration)`) would give an
+# otherwise equal granule that is not `identical()` (e.g. `num 1` vs `int 1`),
+# which keeps such values apart when combined in a `mixtime` vector.
+granule_n_normalise <- function(n) {
+  if (
+    is.double(n) && length(n) == 1L && !is.na(n) &&
+      n == trunc(n) && abs(n) <= .Machine$integer.max
+  ) {
+    n <- as.integer(n)
+  }
+  n
 }

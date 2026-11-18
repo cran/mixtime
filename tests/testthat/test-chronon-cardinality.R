@@ -52,6 +52,45 @@ test_that("chronon_cardinality() falls back to chronon_cardinality_fixed(), scal
   expect_equal(chronon_cardinality(cal_gregorian$year(1L), cal_gregorian$month(1L)), 1 / 12)
 })
 
+test_that("chronon_cardinality() uses inherited fixed methods in either direction", {
+  tu_fixed_parent <- new_time_unit("tu_fixed_parent")
+  tu_fixed_child <- new_time_unit(
+    "tu_fixed_child",
+    parent = tu_fixed_parent
+  )
+  tu_fixed_coarse <- new_time_unit("tu_fixed_coarse")
+  method(
+    chronon_cardinality_fixed,
+    list(tu_fixed_parent, tu_fixed_coarse)
+  ) <- function(x, y) 5L
+
+  fine <- tu_fixed_child(n = 2L)
+  coarse <- tu_fixed_coarse(n = 4L)
+  expect_equal(chronon_cardinality_fixed(fine, coarse), 10)
+  expect_equal(chronon_cardinality(fine, coarse), 10)
+  expect_equal(chronon_cardinality(coarse, fine), 1 / 10)
+})
+
+test_that("chronon_cardinality() uses inherited inverse methods", {
+  tu_variable_parent <- new_time_unit("tu_variable_parent")
+  tu_variable_child <- new_time_unit(
+    "tu_variable_child",
+    parent = tu_variable_parent
+  )
+  tu_variable_coarse <- new_time_unit("tu_variable_coarse")
+  method(
+    chronon_cardinality,
+    list(tu_variable_parent, tu_variable_coarse)
+  ) <- function(x, y, at = NULL) {
+    5 + at
+  }
+
+  fine <- tu_variable_child(n = 1L)
+  coarse <- tu_variable_coarse(n = 1L)
+  expect_equal(chronon_cardinality(fine, coarse, at = 2), 7)
+  expect_equal(chronon_cardinality(coarse, fine, at = 2), 1 / 7)
+})
+
 test_that("only fixed cardinality (and direct divmod) relationships form divmod graph edges", {
   tu_fixed_test_a <- S7::new_class("tu_fixed_test_a", parent = mt_unit)
   tu_fixed_test_b <- S7::new_class("tu_fixed_test_b", parent = mt_unit)
@@ -82,4 +121,83 @@ test_that("only fixed cardinality (and direct divmod) relationships form divmod 
   # without an `at`.
   expect_true(edge_exists(chronon_divmod_graph(), tu_fixed_test_a(1L), tu_fixed_test_b(1L)))
   expect_false(edge_exists(chronon_divmod_graph(), tu_variable_test_a(1L), tu_variable_test_b(1L)))
+})
+
+test_that("cardinality methods receive the calendar through intermediate units", {
+  calendar <- new_calendar(
+    fine = new_time_unit("tu_calendar_fine"),
+    middle = new_time_unit("tu_calendar_middle"),
+    coarse = new_time_unit("tu_calendar_coarse"),
+    name = "cal_cardinality"
+  )
+  seen <- list()
+  cardinality <- function(x, y) {
+    seen[[length(seen) + 1L]] <<- list(time_calendar(x), time_calendar(y))
+    2L
+  }
+  method(
+    chronon_cardinality_fixed,
+    list(calendar$fine, calendar$middle)
+  ) <- cardinality
+  method(
+    chronon_cardinality_fixed,
+    list(calendar$middle, calendar$coarse)
+  ) <- cardinality
+  inherited <- new_calendar(inherit = calendar, name = "cal_inherited")
+
+  expect_equal(
+    chronon_cardinality_fixed(inherited$fine(n = 1L), inherited$coarse(n = 1L)),
+    4
+  )
+  expect_identical(seen, rep(list(list(inherited, inherited)), 2L))
+})
+
+test_that("chronon_cardinality() accepts a time point `at` across a multi-step path", {
+  half_hour <- cal_gregorian$minute(30L)
+  expect_equal(
+    chronon_cardinality(half_hour, cal_gregorian$month(1L), at = yearmonth(as.Date("2024-02-01"))),
+    29 * 48
+  )
+  expect_equal(
+    chronon_cardinality(half_hour, cal_gregorian$year(1L), at = year(as.Date("2024-01-01"))),
+    366 * 48
+  )
+})
+
+test_that("chronon_cardinality() traverses an irregular path with whole units", {
+  # quarter -> month -> day, not quarter -> year -> day (a quarter of a year)
+  expect_equal(
+    chronon_cardinality(cal_gregorian$day(1L), cal_gregorian$quarter(1L), at = date("2024-02-10")),
+    91
+  )
+  expect_equal(
+    chronon_cardinality(cal_gregorian$day(1L), cal_gregorian$quarter(1L), at = yearquarter("2024 Q2")),
+    91
+  )
+  expect_equal(
+    chronon_cardinality(
+      cal_gregorian$hour(1L), cal_gregorian$quarter(1L),
+      at = datetime("2024-02-10 00:00:00", tz = "UTC")
+    ),
+    91 * 24
+  )
+})
+
+test_that("chronon_cardinality() keeps `at` aligned along a multi-step path", {
+  # Symmetry454 year -> month -> week, with leap weeks in 2021 and 2026
+  expect_equal(
+    chronon_cardinality(cal_sym454$week(1L), cal_sym454$year(1L), at = 50:56),
+    c(52, 53, 52, 52, 52, 52, 53)
+  )
+})
+
+test_that("chronon_cardinality() errors for units that don't nest", {
+  expect_error(
+    chronon_cardinality(cal_isoweek$week(1L), cal_gregorian$quarter(1L), at = date("2024-02-10")),
+    "Neither unit is finer than the other"
+  )
+  expect_error(
+    chronon_cardinality(cal_isoweek$week(1L), cal_gregorian$month(1L), at = date("2024-02-10")),
+    "Neither unit is finer than the other"
+  )
 })

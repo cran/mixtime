@@ -38,7 +38,30 @@
 # }
 
 method_signatures <- function(generic) {
+  # S7_methods() is only available in S7 > 0.2.2; fall back to traversing the
+  # generic's method table for older versions.
+  if ("S7_methods" %in% getNamespaceExports("S7")) {
+    S7_methods <- getExportedValue("S7", "S7_methods")
+    return(lapply(S7_methods(generic)$signature, unclass))
+  }
   traverse_methods(generic@methods)
+}
+
+traverse_methods <- function(x) {
+  if (!is.environment(x)) {
+    return(list(x@signature))
+  }
+
+  methods <- lapply(names(x), function(class) traverse_methods(x[[class]]))
+  unlist(methods, recursive = FALSE)
+}
+
+chronon_has_method <- function(generic, x, y) {
+  # Distinguish a specific method from the graph-traversal fallback.
+  !identical(
+    method(generic, object = list(x, y)),
+    method(generic, list(mt_unit, mt_unit))
+  )
 }
 
 S7_signature_id <- function(sig) {
@@ -54,9 +77,19 @@ S7_signature_id <- function(sig) {
 # Compile a signature list into the flattened graph structures shared by
 # S7_graph_dispatch(), S7_graph_dispatch_multi() and S7_graph_glb(): the
 # de-duplicated node classes, their character ids, and integer edge endpoints.
+#
+# Nodes are de-duplicated by class id. A unit inherited by several calendars is
+# a separate class object per calendar (differing only in the "cal" attribute
+# used for the default `@calendar`), but S7 dispatches on the class id so its
+# relationships are the same in every calendar. The class kept for a node is
+# whichever was registered first, so its default calendar is arbitrary:
+# granules built from a node must always set `calendar` explicitly.
 compile_signature_graph <- function(signatures) {
-  classes <- vec_unique(list_unchop(signatures))
+  classes <- list_unchop(signatures)
   chr_classes <- vapply(classes, S7_class_id, character(1L))
+  is_new <- !duplicated(chr_classes)
+  classes <- classes[is_new]
+  chr_classes <- chr_classes[is_new]
 
   int_edges <- vec_match(unlist(S7_signature_id(signatures)), chr_classes)
 
@@ -122,10 +155,12 @@ chronon_cardinality_graph <- function() {
   cache <- .chronon_signature_cache
   if (!identical(cache$cardinality_n, n)) {
     cache$cardinality_n <- n
-    cache$cardinality_graph <- compile_signature_graph(unique(c(
-      sig_card,
-      sig_fixed
-    )))
+    graph <- compile_signature_graph(unique(c(sig_card, sig_fixed)))
+    # Signatures are ordered fine -> coarse, so the edges themselves give the
+    # ordering S7_graph_dispatch() needs to prefer a monotone path.
+    graph$edge_fine <- graph$edge_from
+    graph$edge_coarse <- graph$edge_to
+    cache$cardinality_graph <- graph
   }
   cache$cardinality_graph
 }
@@ -145,7 +180,9 @@ chronon_cardinality_fixed_graph <- function() {
   cache$cardinality_fixed_graph
 }
 
-S7_graph_dispatch <- function(graph, start, end) {
+# With `monotone = TRUE`, returns NULL instead of falling back to the
+# unrestricted search when no monotone path exists.
+S7_graph_dispatch <- function(graph, start, end, monotone = FALSE) {
   int_node_start <- vec_match(S7_class_id(start), graph$chr_classes)
   int_node_end <- vec_match(S7_class_id(end), graph$chr_classes)
   if (is.na(int_node_start) || is.na(int_node_end)) {
@@ -188,6 +225,10 @@ S7_graph_dispatch <- function(graph, start, end) {
         directed = TRUE
       )
     }
+  }
+
+  if (monotone && length(int_path) == 0L) {
+    return(NULL)
   }
 
   # Conversions between units that no monotone path connects (a week is neither
@@ -298,8 +339,8 @@ chronon_fixed_reachable <- function(chronon, granule) {
 # repeating the reachability check.
 chronon_nests_in_fixed_ratio <- function(chronon, granule) {
   ratio <- chronon_cardinality_fixed(
-    S7::S7_class(chronon)(1L),
-    S7::S7_class(granule)(1L)
+    S7::set_props(chronon, n = 1L),
+    S7::set_props(granule, n = 1L)
   )
   (ratio * granule@n) %% chronon@n == 0L
 }
@@ -345,16 +386,6 @@ S7_class_id <- function(x) {
   package <- x@package
   if (is.null(package)) x@name else paste0(package, "::", x@name)
 }
-
-traverse_methods <- function(x) {
-  if (!is.environment(x)) {
-    return(list(x@signature))
-  }
-
-  methods <- lapply(names(x), function(class) traverse_methods(x[[class]]))
-  unlist(methods, recursive = FALSE)
-}
-
 
 bfs_shortest_path <- function(
   from = integer(),
@@ -610,7 +641,7 @@ S7_graph_dispatch_multi <- function(
   # Properties only need copying onto a constructed node when `start` holds one
   # that is not naive (e.g. a time zone) for it to inherit.
   start_informs <- any(
-    !is.naive(props(start)[setdiff(names(props(start)), "n")])
+    !is.naive(props(start)[setdiff(names(props(start)), c("n", "calendar"))])
   )
 
   resolve_tree <- function(node) {
@@ -625,7 +656,7 @@ S7_graph_dispatch_multi <- function(
     } else if (length(finest) && supplied_n[[finest]] <= 1) {
       supplied[[finest]]
     } else {
-      granule <- graph$classes[[node$node]](1L)
+      granule <- graph$classes[[node$node]](1L, calendar = start@calendar)
       if (start_informs) granule_inherit_props(granule, start) else granule
     }
 

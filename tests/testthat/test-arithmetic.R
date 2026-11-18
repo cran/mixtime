@@ -274,6 +274,25 @@ test_that("duration / duration returns a dimensionless ratio", {
   expect_equal(as.double(days(6L) / days(2L)), 3)
   expect_equal(as.double(days(6L) / days(6L)), 1)
   expect_equal(as.double(months(4L) / months(2L)), 2)
+  expect_identical(weeks(1L) / days(1L), 7)
+  expect_identical(days(c(2L, NA, 6L)) / days(2L), c(1, NA, 3))
+})
+
+test_that("subtracting a time point from a number or duration errors", {
+  ym <- yearmonth(as.Date("2020-01-01"))
+  expect_error(months(2L) - ym, "Can't subtract a time point")
+  expect_error(1L - ym, "Can't subtract a time point")
+  expect_equal(format(3 - days(1L)), "2.0 days")
+})
+
+test_that("unary operators on time points and durations", {
+  # S7 <= 0.2.2 can't dispatch unary Ops on S7 objects (fixed in r-lib/S7 dev)
+  skip_if(packageVersion("S7") <= "0.2.2")
+  ym <- yearmonth(as.Date("2020-01-01"))
+  expect_error(-ym, "Can't subtract a time point")
+  expect_identical(+ym, ym)
+  expect_identical(-days(2L), days(-2L))
+  expect_identical(+days(2L), days(2L))
 })
 
 test_that("duration / duration converts to a common chronon before dividing (same calendar)", {

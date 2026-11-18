@@ -4,7 +4,13 @@
 \alias{time_compose}
 \title{Compose a linear time vector from linear and cyclical components}
 \usage{
-time_compose(..., discrete = TRUE, calendar = cal_gregorian)
+time_compose(
+  ...,
+  discrete = TRUE,
+  calendar = cal_gregorian,
+  on_ambiguous = getOption("mixtime.on_ambiguous", "earliest"),
+  offset = NULL
+)
 }
 \arguments{
 \item{...}{Components used to build the time point. Each element is either:
@@ -20,11 +26,28 @@ allowing representation of fractional time granules (continuous time model).}
 
 \item{calendar}{Calendar used to resolve bare granule names in \code{lin()}/
 \code{cyc()} formulas. Defaults to \link{cal_gregorian}.}
+
+\item{on_ambiguous}{How to resolve a time zone aware time point whose local
+time occurs twice (when daylight saving ends) and that \code{offset} doesn't
+resolve. One of \code{"earliest"} (the default), \code{"latest"}, \code{"reject"}
+(\code{NA} with a warning) or \code{"error"}. The default is set by the
+\code{mixtime.on_ambiguous} option. Without a strategy chosen by either, an
+ambiguous time point warns and resolves to its earliest occurrence.}
+
+\item{offset}{The UTC offset of each time point, which tells apart the two
+occurrences of a repeated local time. Either a duration of fixed length
+(e.g. \code{hours(11L)}, or \code{\link[=tz_offset]{tz_offset()}} of the times the components came
+from), or time zone abbreviations of the components' time zone (e.g.
+\code{"AEDT"}). \code{NA} where not known. Each offset must be one in use at that
+local time. For a local time skipped when daylight saving starts, the
+offset gives the instant it describes (e.g. 02:30 AEST is 03:30 AEDT).}
 }
 \value{
 A \code{mixtime} time vector, at the finest chronon reached by the
 chain (or the root's own chronon, if only one component is given).
-Linear with a \code{lin()} anchor, cyclical otherwise.
+Linear with a \code{lin()} component; underspecified cyclical (\code{mt_cyclical_free})
+otherwise, since there is then no point in time for the result to be a
+position within.
 }
 \description{
 \code{time_compose()} is the inverse of \code{\link[=time_components]{time_components()}}: given a set of
@@ -34,17 +57,23 @@ or an already-tagged linear/cyclical time vector (e.g. produced by
 \code{\link[=linear_time]{linear_time()}}, \code{\link[=cyclical_time]{cyclical_time()}}, or a \code{\link[=time_components]{time_components()}} column).
 }
 \details{
-A \code{lin()} component (the \strong{anchor}), when supplied, fixes the absolute
-position at some granule (e.g. the year). Every other component must be
-\code{cyc()}, chaining without gaps or branches from the anchor down to the
+A \code{lin()} component, when supplied, locates the time point at some granule
+(e.g. the year). Every other component must be
+\code{cyc()}, chaining without gaps or branches from the \code{lin()} down to the
 target chronon: each cycle must equal another component's chronon exactly.
 
-With no \code{lin()} anchor, every component must be \code{cyc()}, chained the same
-way but rooted at whichever component's cycle isn't itself another
-component's chronon. The result is cyclical time tagged with that root's
-cycle: \code{cyc(month, year) ~ 3} alone matches \code{month_of_year()} for any
-March; chaining \code{cyc(day, month) ~ 15} onto it collapses to one (day,
-year) pair, day-of-year 74, matching \code{day_of_year()} for 15 March.
+With no \code{lin()} component, every component must be \code{cyc()}, chained the
+same way but rooted at whichever component's cycle isn't itself another
+component's chronon. The result is underspecified cyclical time (see
+\code{\link[=cyclical_time]{cyclical_time()}}) tagged with that root's cycle: \code{cyc(month, year) ~ 3} alone matches \code{month_of_year()} for any
+March. Chained components collapse to one (chronon, cycle) offset, e.g.
+\code{cyc(minute, hour) ~ 30} and \code{cyc(hour, day) ~ 3} give minute-of-day 149.
+This is only possible when every link has a fixed length: the number of
+days in a month varies, so day 29 of month 3 isn't a fixed day of the year
+and is an error without a \code{lin()} component. Supply a \code{lin()} component (or
+an existing linear vector) to locate it, e.g. \code{time_compose(lin(year) ~ 2024, cyc(month, year) ~ 3, cyc(day, month) ~ 29)}. Underspecified
+components (e.g. \code{\link[=day_of_month]{day_of_month()}}) are then validated against the located
+time and may be given in any order.
 
 Values of linear and cyclical components are specified on the right-hand-side
 of the formula. A \code{lin()} value is the real-world count (e.g. the literal
@@ -53,23 +82,55 @@ year 1980); a \code{cyc()} value is the 1-indexed position within the cycle
 counting rather than the raw 0-indexed position \code{\link[=time_components]{time_components()}} uses
 internally.
 }
+\section{Time zones}{
+
+Time zone aware components are composed in local (wall clock) time, and the
+result is then resolved to the instant it describes. When daylight saving
+ends, part of the day repeats, and a local time in it is ambiguous. It is
+resolved, in order, by:
+\enumerate{
+\item a time zone aware \code{lin()} component (e.g. \code{lin(hour)} from
+\code{\link[=time_components]{time_components()}}), which already identifies one of the two
+occurrences;
+\item its \code{offset};
+\item the \code{on_ambiguous} strategy, which warns if it wasn't chosen.
+}
+
+When daylight saving starts, part of the day is skipped. A local time in it
+is resolved by its \code{offset} if given, and otherwise by the
+\code{mixtime.on_invalid} option, as in \code{\link[=time_shift]{time_shift()}} (see
+\code{vignette("invalid-time-points")}).
+}
+
 \examples{
 # cyc() values are 1-indexed positions: month 3 is March, day 15 is the 15th
 time_compose(lin(year) ~ 1980, cyc(month, year) ~ 3, cyc(day, month) ~ 15)
 
-# A lin() anchor alone is a valid (coarser) time point
+# A lin() component alone is a valid (coarser) time point
 time_compose(lin(year) ~ 1980)
 
-# No lin() anchor: composes cyclical time
+# No lin() component: composes underspecified cyclical time
 time_compose(cyc(month, year) ~ 3)
 
-# Chaining collapses to one (chronon, cycle) pair: day 15 of month 3
-# becomes day-of-year 74
-time_compose(cyc(day, month) ~ 15, cyc(month, year) ~ 3)
+# Fixed-length chains collapse to one (chronon, cycle) pair: minute 30 of
+# hour 3 becomes minute-of-day
+time_compose(cyc(minute, hour) ~ 30, cyc(hour, day) ~ 3)
+
+# Variable-length links (days in a month) need a lin() component
+time_compose(lin(year) ~ 2024, day_of_month(29), month_of_year(2))
 
 # Round-tripping through time_components()
 parts <- time_components(as.Date("2024-03-15"), yr = lin(year), mth = cyc(month, year))
 with(parts, time_compose(yr, mth))
+
+# Repeated local times when daylight saving ends: 02:30 occurs twice in
+# Melbourne on 5 April 2026, first in AEDT (+11) then in AEST (+10)
+x <- datetime(c("2026-04-05 01:30:00", "2026-04-05 03:30:00"), tz = "Australia/Melbourne")
+x <- c(x[1] + hours(1L), x[2] - hours(1L))
+parts <- time_components(x, d = lin(day), h = cyc(hour, day), m = cyc(minute, hour))
+with(parts, time_compose(d, h, m, offset = tz_offset(x)))
+with(parts, time_compose(d, h, m, offset = c("AEDT", "AEST")))
+with(parts, time_compose(d, h, m, on_ambiguous = "latest"))
 
 # Multi-unit (self-referencing) cycles: the 3rd month (1-indexed) of the
 # 4th 3-month block since epoch (block 3 = months 9-11 -> December 1970)

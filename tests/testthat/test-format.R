@@ -76,7 +76,13 @@ test_that("format() falls back to the generic mt_unit template for a naive-tz ci
   # templates must not reference them (see tz-merge.md). Instead they defer
   # (via S7::super()) to the same generic mt_unit fallback used for any other
   # chronon without a bespoke format template.
-  combined <- c(date(Sys.Date()), datetime(as.POSIXct("2015-01-01", tz = "UTC")))
+  combined <- c(
+    linear_time(Sys.Date(), chronon = cal_time_civil$day(1L)),
+    linear_time(
+      as.POSIXct("2015-01-01", tz = "UTC"),
+      chronon = cal_time_civil$second(1L)
+    )
+  )
   ch <- chronon_glb(combined)
   expect_true(is.na(tz_name(ch)))
   expect_null(time_calendar(ch)$year)
@@ -126,4 +132,19 @@ test_that("chronon_divmod() across several granules works on vectors", {
   res <- chronon_divmod(cal_gregorian$microsecond(1L), cal_gregorian$second(1L), c(1500000, 2, NA))
   expect_equal(res$div, c(1, 0, NA))
   expect_equal(res$mod, c(500000, 2, NA))
+})
+
+test_that("dur() tokens format durations in their (1-unit) granule", {
+  d <- hours(c(2L, 30L, NA))
+
+  expect_equal(format(d, "{dur(hour)}"), c("2 hours", "30 hours", "NA"))
+  expect_equal(format(d, "{dur(minute)}"), c("120 minutes", "1800 minutes", "NA"))
+  expect_equal(format(duration(2L, cal_gregorian$hour(3L)), "{dur(hour)}"), "6 hours")
+  expect_equal(format(duration(1.5, cal_gregorian$day(1L)), "{dur(day)} long"), "1.5 days long")
+})
+
+test_that("dur() only formats durations, and only in format strings", {
+  expect_error(format(as_mixtime(as.Date("2024-01-01")), "{dur(day)}"), "only format durations")
+  expect_error(time_components(as.Date("2024-01-01"), dur(day)), "time_components")
+  expect_error(dur(day), "component-aware context")
 })

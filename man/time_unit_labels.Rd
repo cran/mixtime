@@ -6,16 +6,14 @@
 \alias{time_unit_abbr}
 \title{Time units as a string}
 \usage{
-time_unit_full(x, ...)
+time_unit_full(x)
 
 time_unit_plural(x, n = 2L)
 
-time_unit_abbr(x, ...)
+time_unit_abbr(x)
 }
 \arguments{
 \item{x}{A time granule object (e.g., \code{cal_gregorian$month(1L)})}
-
-\item{...}{Additional arguments for methods.}
 
 \item{n}{Numeric quantity used to select singular or plural form.}
 }
@@ -23,16 +21,13 @@ time_unit_abbr(x, ...)
 A string representing the time unit
 }
 \description{
-These S7 generic functions provide the full and abbreviated names for time
-units. \code{time_unit_full()} is used in messages and durations (e.g., "2 months").
-\code{time_unit_abbr()} is used for tsibble index interval displays (e.g., "1M").
-\code{time_unit_plural()} pluralises the full unit name for a given quantity using
-cli-style pluralisation (e.g., \code{"year{?/s}"} becomes \code{"year"} or \code{"years"}).
+\ifelse{html}{\href{https://lifecycle.r-lib.org/articles/stages.html#deprecated}{\figure{lifecycle-deprecated.svg}{options: alt='[Deprecated]'}}}{\strong{[Deprecated]}}
 }
-\examples{
-time_unit_full(cal_gregorian$year(1L))
-time_unit_plural(cal_gregorian$year(1L), 1L)
-time_unit_plural(cal_gregorian$year(1L), 2L)
-time_unit_abbr(cal_gregorian$year(1L))
-
+\details{
+These functions are superseded by \code{\link[=unit_labels]{unit_labels()}} and \code{\link[=unit_scheme]{unit_scheme()}}, and
+are only kept as thin wrappers for backwards compatibility.
+\code{time_unit_full()} returns the full unit name template (e.g. \code{"year{?/s}"}),
+\code{time_unit_plural()} pluralises it for a quantity, and \code{time_unit_abbr()}
+returns the unit symbol (e.g. \code{"Y"}).
 }
+\keyword{internal}

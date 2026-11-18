@@ -4,12 +4,17 @@
 \alias{chronon_cardinality}
 \title{Cardinality between time granules}
 \usage{
-chronon_cardinality(x, y, ...)
+chronon_cardinality(x, y = chronon_glb(at), at = NULL, ...)
 }
 \arguments{
 \item{x}{The finer time granule (e.g. \code{cal_gregorian$month(1L)})}
 
 \item{y}{The coarser time granule (e.g. \code{cal_gregorian$year(1L)})}
+
+\item{at}{Optional time point for context-dependent cardinality. Either a
+time point (e.g. a \code{yearmonth()} or \code{Date}), which is converted to the \code{y}
+chronon containing it, or the number of \code{y} chronons since the epoch. If \code{y}
+is omitted, the chronon of \code{at} is used.}
 
 \item{...}{Additional arguments for methods.}
 }
@@ -52,20 +57,17 @@ with(cal_gregorian, chronon_cardinality(month(2L), year(3L)))
 
 # There are 365 days in 2025 (a common year)
 chronon_cardinality(
-  cal_gregorian$day(1L), cal_gregorian$year(1L),
-  at = year(as.Date("2025-01-01"))
+  cal_gregorian$day(1L), at = year(as.Date("2025-01-01"))
 )
 
 # There are 366 days in 2024 (a leap year)
 chronon_cardinality(
-  cal_gregorian$day(1L), cal_gregorian$year(1L), 
-  at = mixtime::year(as.Date("2024-01-01"))
+  cal_gregorian$day(1L), at = year(as.Date("2024-01-01"))
 )
 
 # There are 29 days in February 2024 (a leap year)
 chronon_cardinality(
-  cal_gregorian$day(1L), cal_gregorian$month(1L), 
-  at = yearmonth(as.Date("2024-02-01"))
+  cal_gregorian$day(1L), at = yearmonth(as.Date("2024-02-01"))
 )
 
 }

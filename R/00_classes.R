@@ -1,9 +1,57 @@
+#' Base S7 class for calendars
+#'
+#' `mt_calendar` is the parent class of every calendar. A calendar is a named
+#' list of time unit classes, and each calendar created with [new_calendar()]
+#' is the single instance of its own subclass of `mt_calendar` (e.g.
+#' `cal_isoweek` is an instance of class `cal_isoweek`). This allows methods to
+#' dispatch on the calendar, such as formatting a shared unit differently in
+#' each calendar that contains it.
+#'
+#' Time units record their calendar by its identifier (`"<package>::<name>"`),
+#' which is resolved back to the calendar object when the unit's `@calendar`
+#' is accessed. This keeps time objects small when serialised, and their
+#' calendar is restored from the current definition when read back in.
+#'
+#' @param .data A named list of time unit classes.
+#'
+#' @return An S7 class object, or a calendar when called as a constructor.
+#'   End users should use [new_calendar()] to create calendars.
+#'
+#' @seealso [new_calendar()] for creating calendars, [time_calendar()] for
+#'   obtaining the calendar of a time object.
+#'
+#' @export
+mt_calendar <- S7::new_class(
+  "mt_calendar",
+  parent = S7::class_list,
+  validator = function(self) {
+    units <- S7::S7_data(self)
+    if (length(units) > 0L && (is.null(names(units)) || any(names(units) == ""))) {
+      return("must contain named time units")
+    }
+    if (!all(vapply(units, is_unit_class, logical(1L)))) {
+      return("must contain only time unit classes")
+    }
+  }
+)
+
+# Is `x` a time unit class (an S7 class inheriting from mt_unit)?
+is_unit_class <- function(x) {
+  while (inherits(x, "S7_class")) {
+    if (identical(x@name, "mt_unit") && identical(x@package, "mixtime")) {
+      return(TRUE)
+    }
+    x <- x@parent
+  }
+  FALSE
+}
+
 #' Base S7 class for creating new time units
 #' 
 #' This class is the primitive class for time units, and should
 #' be extended from when creating new time units. A new class
-#' is typically created with S7 using: 
-#' `S7::new_class("tu_***", parent = mt_tz_unit)`
+#' is typically created with [new_time_unit()] using:
+#' `new_time_unit("tu_***", parent = mt_tz_unit)`
 #' 
 #' Time units are the building blocks of calendars in mixtime. Each unit
 #' represents a specific temporal component (e.g., day, month, year) and
@@ -48,6 +96,8 @@
 #' 
 #' @param n The step size of time granule. For example, `n = 2L` is 2 time 
 #'   units, and `cal_isoweek$week(2L)` would represent 2 weeks (a fortnight).
+#' @param calendar The calendar containing the unit. Calendar constructors
+#'   supply this automatically.
 #' 
 #' @return A time granule object of class `mt_unit`
 #' 
@@ -58,9 +108,9 @@
 #' 
 #' # Use these units to create a calendar
 #' my_calendar <- new_calendar(
-#'   day = S7::new_class("tu_my_day", parent = mt_unit),
-#'   month = S7::new_class("tu_my_month", parent = mt_tz_unit),
-#'   class = "my_calendar"
+#'   day = new_time_unit("tu_my_day", parent = mt_unit),
+#'   month = new_time_unit("tu_my_month", parent = mt_tz_unit),
+#'   name = "my_calendar"
 #' )
 #' 
 #' # Access unit constructors from the calendar
@@ -74,7 +124,28 @@ mt_unit <- S7::new_class(
   properties = list(
     n = S7::new_property(
       class = S7::class_numeric,
-      default = 1L
+      default = 1L,
+      # Store whole-number sizes as integers, so equal granules are
+      # `identical()` regardless of whether `n` was computed as a double
+      # (e.g. `unit@n * as.numeric(duration)`).
+      setter = function(self, value) {
+        self@n <- granule_n_normalise(value)
+        self
+      }
+    ),
+    calendar = S7::new_property(
+      # The S3 form of mt_calendar avoids embedding its class definition in
+      # every time unit class (the setter validates the calendar).
+      class = NULL | S7::new_S3_class("mixtime::mt_calendar"),
+      # The calendar is stored by its identifier, and resolved on access.
+      getter = function(self) {
+        calendar_resolve(attr(self, "calendar", exact = TRUE))
+      },
+      setter = function(self, value) {
+        attr(self, "calendar") <- calendar_id(value)
+        self
+      },
+      default = quote(attr(sys.function(), "cal"))
     )
   ),
   # validator = function(self) {
@@ -88,19 +159,25 @@ mt_unit <- S7::new_class(
 #'
 #' @description
 #' The `mt_time` family are the S7 vector classes that store time points as a
-#' numeric count of chronons. `mt_time` is the (internal) base class carrying 
+#' numeric count of chronons. `mt_time` is the (internal) base class carrying
 #' the `chronon` property; the common modes of time are:
 #'
 #' * `mt_linear` - linear time points, typically produced with [linear_time()].
-#' * `mt_cyclical` - cyclical time points with additional `cycle` granule, 
-#'   typically produced with [cyclical_time()].
+#' * `mt_cyclical` - located cyclical time: positions within a `cycle` granule
+#'   that know their enclosing cycle, typically produced with
+#'   [cyclical_time()] from time points.
 #' * `mt_duration` - time durations, typically produced with [duration()].
+#' * `mt_cyclical_free` - underspecified cyclical time: positions within a
+#'   cycle whose enclosing cycle is unknown (e.g. "day 60 of the year" with no
+#'   year known), produced by [cyclical_time()] with bare numeric input, or
+#'   by [time_compose()]/[time_parse()] with no [lin()] component.
 #'
 #' The underlying data can be either **integer** (discrete time) or **double**
 #' (continuous time). The `chronon` (and, for `mt_cyclical`, the `cycle`) are 
 #' time granules, the result from a [mt_unit] object.
 #'
-#' @param .data A numeric vector of chronon counts (integer or double).
+#' @param ... Passed to the parent constructor, typically `.data`: a numeric
+#'   vector of chronon counts (integer or double).
 #' @param chronon,cycle Time granules ([mt_unit] objects) giving the unit of the
 #'   chronon counts and, for `mt_cyclical`, the length of the cycle.
 #'
@@ -150,14 +227,17 @@ mt_time <- S7::new_class(
 )
 
 #' @rdname mt_time-class
+#' @usage NULL
 #' @export
 mt_linear <- S7::new_class("mt_linear", parent = mt_time)
 
 #' @rdname mt_time-class
+#' @usage NULL
 #' @export
 mt_duration <- S7::new_class("mt_duration", parent = mt_time)
 
 #' @rdname mt_time-class
+#' @usage NULL
 #' @export
 mt_cyclical <- S7::new_class(
   "mt_cyclical",
@@ -171,6 +251,36 @@ mt_cyclical <- S7::new_class(
   )
 )
 
+#' @rdname mt_time-class
+#' @usage mt_cyclical_free(..., chronon = mt_unit(1L), cycle = mt_unit(1L))
+#' @export
+mt_cyclical_free <- S7::new_class(
+  "mt_cyclical_free",
+  parent = mt_time,
+  properties = list(
+    cycle = S7::new_property(
+      class = mt_unit,
+      default = quote(mt_unit(1L)),
+      validator = granule_len1
+    )
+  ),
+  # A free value has no instant to localise, so its granules never carry a tz.
+  constructor = function(..., chronon = mt_unit(1L), cycle = mt_unit(1L)) {
+    S7::new_object(
+      mt_time(..., chronon = granule_drop_tz(chronon)),
+      cycle = granule_drop_tz(cycle)
+    )
+  }
+)
+
+# Make a granule time-zone-naive (a no-op for granules without a tz).
+granule_drop_tz <- function(x) {
+  if (S7_inherits(x, mt_tz_unit)) {
+    x@tz <- naive_tz
+  }
+  x
+}
+
 #' Base S7 class for mixtime vector objects
 #'
 #' `class_mixtime` is the base S7 class for all mixtime vector objects,
@@ -179,8 +289,12 @@ mt_cyclical <- S7::new_class(
 #' mixtime vectors. S3 methods can be defined using the `mixtime::mixtime` 
 #' class.
 #' 
-#' @param x A list of `"mt_time"` vectors, see [mt_linear()] for details.
-#' @inheritParams vecvec::class_vecvec
+#' When called as a constructor, its arguments are passed to the
+#' [vecvec::class_vecvec()] constructor:
+#'   * `x`: A list of `"mt_time"` vectors, see [mt_linear()] for details.
+#'   * `i`: A vector of integers specifying the location of each element in
+#'     `x` as if they were combined in order. Defaults to a sequence from 1 to
+#'     the total number of elements across all vectors in `x`.
 #'
 #' @return When used as a class definition (e.g., in `S7::method(generic,
 #'   class_mixtime)`), an S7 class object representing the `mixtime` class,
@@ -194,6 +308,7 @@ mt_cyclical <- S7::new_class(
 #' the low-level constructor function of this S7 class.
 #'
 #' @importFrom vecvec class_vecvec
+#' @usage NULL
 #' @export
 class_mixtime <- S7::new_class(
   "mixtime",

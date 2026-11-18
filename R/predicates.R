@@ -1,9 +1,14 @@
 #' Check the time type of values
 #'
-#' Test whether elements of a `mixtime` vector are linear, cyclical, or durations.
+#' Test whether elements of a `mixtime` vector are linear, cyclical,
+#' underspecified cyclical, or durations.
 #'
 #' These helpers return a logical vector the same length as `x` identifying the
-#' type of time represented by each element.
+#' type of time represented by each element. `time_is_cyclical()` and
+#' `time_is_cyclical_free()` are distinct: located cyclical time (e.g.
+#' [month_of_year()] of a real date) knows its enclosing cycle (which year),
+#' while underspecified cyclical time (e.g. bare `month_of_year(3)`) doesn't.
+#' See [cyclical_time()] for the differences.
 #'
 #' @param x A time object (typically a `mixtime` vector).
 #' @param ... Additional arguments for methods.
@@ -11,10 +16,12 @@
 #' @return A logical vector the same length as `x`.
 #'
 #' @examples
-#' t <- c(yearmonth(0), month_of_year(0), months(0L))
+#' t <- c(yearmonth(0), month_of_year(as.Date("2020-01-01")), months(0L))
 #' time_is_linear(t)
 #' time_is_cyclical(t)
 #' time_is_duration(t)
+#'
+#' time_is_cyclical_free(month_of_year(3))
 #'
 #' @name is_time
 #' @export
@@ -32,29 +39,18 @@ method(time_is_cyclical, mt_cyclical) <- function(x) rep.int(TRUE, length(x))
 
 #' @rdname is_time
 #' @export
+time_is_cyclical_free <- S7::new_generic("time_is_cyclical_free", "x")
+method(time_is_cyclical_free, class_mixtime) <- vecvec::vecvec_apply_fn(time_is_cyclical_free, logical())
+method(time_is_cyclical_free, class_any) <- function(x) rep.int(FALSE, length(x))
+method(time_is_cyclical_free, mt_cyclical_free) <- function(x) rep.int(TRUE, length(x))
+
+#' @rdname is_time
+#' @export
 time_is_duration <- S7::new_generic("time_is_duration", "x")
 method(time_is_duration, class_mixtime) <- vecvec::vecvec_apply_fn(time_is_duration, logical())
 method(time_is_duration, class_any) <- function(x) rep.int(FALSE, length(x))
 method(time_is_duration, mt_duration) <- function(x) rep.int(TRUE, length(x))
 method(time_is_duration, new_S4_class("Period", package = "lubridate")) <- function(x) rep.int(TRUE, length(x))
-
-#' @rdname is_time
-#' @export
-is_time_linear <- function(x, ...) {
-  lifecycle::deprecate_stop("0.3.0", "is_time_linear()", "time_is_linear()")
-}
-
-#' @rdname is_time
-#' @export
-is_time_cyclical <- function(x, ...) {
-  lifecycle::deprecate_stop("0.3.0", "is_time_cyclical()", "time_is_cyclical()")
-}
-
-#' @rdname is_time
-#' @export
-is_time_duration <- function(x, ...) {
-  lifecycle::deprecate_stop("0.3.0", "is_time_duration()", "time_is_duration()")
-}
 
 #' Test whether time is determinate at a granule's precision
 #'

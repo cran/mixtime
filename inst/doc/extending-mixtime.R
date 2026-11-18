@@ -25,7 +25,7 @@ cal_symmetry454 <- new_calendar(
   week  = cal_isoweek$week,
   # Inherit civil-time units (day, hour, minute, second, ...)
   inherit = cal_time_civil,
-  class = "cal_symmetry454"
+  name = "cal_symmetry454"
 )
 
 cal_symmetry454
@@ -211,10 +211,14 @@ with(cal_symmetry454, chronon_divmod(day(1L), year(1L), 839L))
 method(chronon_epoch, cal_symmetry454$year) <- function(x) 1970L
 
 ## -----------------------------------------------------------------------------
-method(time_unit_full, cal_symmetry454$year)  <- function(x) "Symmetry454 year{?/s}"
-method(time_unit_abbr, cal_symmetry454$year)  <- function(x) "Y"
-method(time_unit_full, cal_symmetry454$month) <- function(x) "Symmetry454 month{?/s}"
-method(time_unit_abbr, cal_symmetry454$month) <- function(x) "M"
+method(unit_labels, cal_symmetry454$year) <- unit_scheme(
+  vocab = vocab_table(`en-GB` = list(wide = "Symmetry454 year{?/s}")),
+  symbol = "Y"
+)
+method(unit_labels, cal_symmetry454$month) <- unit_scheme(
+  vocab = vocab_table(`en-GB` = list(wide = "Symmetry454 month{?/s}")),
+  symbol = "M"
+)
 
 ## -----------------------------------------------------------------------------
 linear_time(as.Date("1955-11-12"), chronon = cal_symmetry454$year(1L))
@@ -294,13 +298,13 @@ method(
 # Display weeks as week in month in year (e.g. "1970-01-W1", "1970-01-W2", ...)
 method(
   chronon_format_linear,
-  list(cal_symmetry454$week, S7::new_S3_class("cal_symmetry454"))
+  list(cal_symmetry454$week, S7::S7_class(cal_symmetry454))
 ) <- function(x, cal) "{lin(year(1L))}-{cyc(month(1L), year(1L), label=TRUE, abbreviate=TRUE)}-W{cyc(week(1L), month(1L))}"
 
 # Format days as day in week in month in year (e.g. "1970-Jan-W1-Mon", "1970-Jan-W1-Tue", ...)
 method(
   chronon_format_linear,
-  list(cal_symmetry454$day, S7::new_S3_class("cal_symmetry454"))
+  list(cal_symmetry454$day, S7::S7_class(cal_symmetry454))
 ) <- function(x, cal) "{lin(year(1L))}-{cyc(month(1L), year(1L), label=TRUE, abbreviate=TRUE)}-W{cyc(week(1L), month(1L))}-{cyc(day(1L), week(1L), label=TRUE, abbreviate=TRUE)}"
 
 ## -----------------------------------------------------------------------------

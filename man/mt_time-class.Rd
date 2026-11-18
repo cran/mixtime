@@ -6,16 +6,14 @@
 \alias{mt_linear}
 \alias{mt_duration}
 \alias{mt_cyclical}
+\alias{mt_cyclical_free}
 \title{Time vector classes}
 \usage{
-mt_linear(.data = integer(), chronon = mt_unit(1L))
-
-mt_duration(.data = integer(), chronon = mt_unit(1L))
-
-mt_cyclical(.data = integer(), chronon = mt_unit(1L), cycle = mt_unit(1L))
+mt_cyclical_free(..., chronon = mt_unit(1L), cycle = mt_unit(1L))
 }
 \arguments{
-\item{.data}{A numeric vector of chronon counts (integer or double).}
+\item{...}{Passed to the parent constructor, typically \code{.data}: a numeric
+vector of chronon counts (integer or double).}
 
 \item{chronon, cycle}{Time granules (\link{mt_unit} objects) giving the unit of the
 chronon counts and, for \code{mt_cyclical}, the length of the cycle.}
@@ -30,9 +28,14 @@ numeric count of chronons. \code{mt_time} is the (internal) base class carrying
 the \code{chronon} property; the common modes of time are:
 \itemize{
 \item \code{mt_linear} - linear time points, typically produced with \code{\link[=linear_time]{linear_time()}}.
-\item \code{mt_cyclical} - cyclical time points with additional \code{cycle} granule,
-typically produced with \code{\link[=cyclical_time]{cyclical_time()}}.
+\item \code{mt_cyclical} - located cyclical time: positions within a \code{cycle} granule
+that know their enclosing cycle, typically produced with
+\code{\link[=cyclical_time]{cyclical_time()}} from time points.
 \item \code{mt_duration} - time durations, typically produced with \code{\link[=duration]{duration()}}.
+\item \code{mt_cyclical_free} - underspecified cyclical time: positions within a
+cycle whose enclosing cycle is unknown (e.g. "day 60 of the year" with no
+year known), produced by \code{\link[=cyclical_time]{cyclical_time()}} with bare numeric input, or
+by \code{\link[=time_compose]{time_compose()}}/\code{\link[=time_parse]{time_parse()}} with no \code{\link[=lin]{lin()}} component.
 }
 
 The underlying data can be either \strong{integer} (discrete time) or \strong{double}

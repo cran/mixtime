@@ -3,26 +3,49 @@
 \name{format.mt_time}
 \alias{format.mt_time}
 \alias{format,mt_time-method}
+\alias{format,mt_cyclical_free-method}
+\alias{format.mt_cyclical_free}
+\alias{format,mixtime::mt_cyclical_free-method}
 \title{Format mixtime vectors}
 \usage{
 \S4method{format}{mt_time}(x, ..., attr = TRUE)
+\S4method{format}{mt_cyclical_free}(x, format = NULL, ..., attr = TRUE)
+
+## S7 method for class <mixtime::mt_cyclical_free>
+\special{format(x, format = NULL, ..., attr = TRUE)}
 }
 \arguments{
 \item{x}{A mixtime vector.}
 
-\item{...}{Additional arguments for methods, including \code{format}: a
-glue-style format string, defaulting to one derived automatically for \code{x}.}
+\item{...}{Additional arguments for methods, including \code{format} for time
+points.}
 
 \item{attr}{If \code{TRUE} (default), append attribute information (e.g.
 timezone) to the default format.}
+
+\item{format}{A glue-style format string, defaulting to one derived
+automatically for \code{x}. For time points it is passed via \code{...}.}
 }
 \value{
 A character vector the same length as \code{x}.
 }
 \description{
 Formats a mixtime vector as a character vector, using a glue-style format
-string of \code{{lin(...)}}/\code{{cyc(...)}} tokens tailored to the vector's chronon
+string of \code{{lin(...)}}/\code{{cyc(...)}} (or, for durations, \code{{dur(...)}}) tokens tailored to the vector's chronon
 and cycle. If \code{format} is omitted, a sensible default is derived
 automatically. See \code{vignette("time-format-strings")} for the format string
 syntax.
+}
+\section{Underspecified cyclical time}{
+
+Underspecified cyclical time (e.g. \code{month_of_year(3)}) has no position on
+the time line, so only \code{{cyc(...)}} tokens can be used. Attribute tokens
+such as \code{{tz(.time)}} render as empty text.
+}
+
+\examples{
+format(yearmonth("2024-03"))
+format(date("2024-03-15"), format = "{cyc(day(1L), month(1L))} {lin(year(1L))}")
+format(month_of_year(3))
+
 }

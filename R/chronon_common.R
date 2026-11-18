@@ -131,7 +131,9 @@ chronon_bound_impl <- function(chronons, .ptype = NULL, graph_fn) {
   # The cardinality methods are directional
   # (such that `x` is a finer chronon than `y`)
   # Construct a graph of the methods to find the common bound chronon.
-  bound <- graph_fn(chronon_cardinality_graph(), chronons)(1L)
+  # The bound's calendar is only kept when shared by all input chronons, so it
+  # starts without one (rather than the graph node's arbitrary default).
+  bound <- graph_fn(chronon_cardinality_graph(), chronons)(1L, calendar = NULL)
 
   # Restore properties of the common chronon from the input chronons.
   # If the properties (e.g. timezone) vary across the input chronons, they are
@@ -161,6 +163,6 @@ chronon_lub_impl <- function(chronons, .ptype = NULL) {
 #' @rdname chronon_glb
 #' @export
 chronon_common <- function(x, .ptype = NULL, ...) {
-  lifecycle::deprecate_soft("0.4.0", "chronon_common()", "chronon_glb()")
+  lifecycle::deprecate_warn("0.4.0", "chronon_common()", "chronon_glb()")
   chronon_glb(x, .ptype = .ptype, ...)
 }

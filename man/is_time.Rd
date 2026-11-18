@@ -4,23 +4,17 @@
 \alias{is_time}
 \alias{time_is_linear}
 \alias{time_is_cyclical}
+\alias{time_is_cyclical_free}
 \alias{time_is_duration}
-\alias{is_time_linear}
-\alias{is_time_cyclical}
-\alias{is_time_duration}
 \title{Check the time type of values}
 \usage{
 time_is_linear(x, ...)
 
 time_is_cyclical(x, ...)
 
+time_is_cyclical_free(x, ...)
+
 time_is_duration(x, ...)
-
-is_time_linear(x, ...)
-
-is_time_cyclical(x, ...)
-
-is_time_duration(x, ...)
 }
 \arguments{
 \item{x}{A time object (typically a \code{mixtime} vector).}
@@ -31,16 +25,23 @@ is_time_duration(x, ...)
 A logical vector the same length as \code{x}.
 }
 \description{
-Test whether elements of a \code{mixtime} vector are linear, cyclical, or durations.
+Test whether elements of a \code{mixtime} vector are linear, cyclical,
+underspecified cyclical, or durations.
 }
 \details{
 These helpers return a logical vector the same length as \code{x} identifying the
-type of time represented by each element.
+type of time represented by each element. \code{time_is_cyclical()} and
+\code{time_is_cyclical_free()} are distinct: located cyclical time (e.g.
+\code{\link[=month_of_year]{month_of_year()}} of a real date) knows its enclosing cycle (which year),
+while underspecified cyclical time (e.g. bare \code{month_of_year(3)}) doesn't.
+See \code{\link[=cyclical_time]{cyclical_time()}} for the differences.
 }
 \examples{
-t <- c(yearmonth(0), month_of_year(0), months(0L))
+t <- c(yearmonth(0), month_of_year(as.Date("2020-01-01")), months(0L))
 time_is_linear(t)
 time_is_cyclical(t)
 time_is_duration(t)
+
+time_is_cyclical_free(month_of_year(3))
 
 }
